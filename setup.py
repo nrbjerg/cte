@@ -6,5 +6,5 @@ setup(
     description="An enviornment for doing computational experiments within the context of my PhD.",
     author="Martin Sig Nørbjerg",
     author_email="msno@mp.aau.dk",
-    packages=find_packages(where="source")
+    packages=find_packages()
 )
