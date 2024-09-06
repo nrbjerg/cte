@@ -11,6 +11,11 @@ class Node:
     costs: List[float]
     pos: Tuple[float, float]
     score: float
+    size: float | None = None # The size of the node in plots, if we need to plot it.
+
+    def __hash__(self) -> int:
+        """Used for hashing in order to create sets of nodes"""
+        return self.node_id
 
 def compute_distance (v: Node, w: Node) -> float:
     """Computes the euclidian distance between a pair of nodes."""
