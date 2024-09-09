@@ -17,6 +17,12 @@ class Node:
         """Used for hashing in order to create sets of nodes"""
         return self.node_id
 
-def compute_distance (v: Node, w: Node) -> float:
+def compute_cost (v: Node, w: Node) -> float:
     """Computes the euclidian distance between a pair of nodes."""
     return np.sqrt(np.square(v.pos[0] - w.pos[0]) + np.square(v.pos[1] - w.pos[1]))
+
+def populate_costs (nodes: List[Node]):
+    """Pupulate the scores, note that this function does not impose the asusmption that we have a undirected graph."""
+    for idx, node in enumerate(nodes):
+        for adjacent_node in node.adjacent_nodes:
+            nodes[idx].costs.append(compute_cost(node, adjacent_node)) 

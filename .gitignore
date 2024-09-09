@@ -1,4 +1,4 @@
 /resources
-*/__pychache__/
+__pychache__/
 *.py[cod]
-/cte.egg-info
+*.egg-info

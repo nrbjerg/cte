@@ -4,10 +4,10 @@ from typing import List
 import numpy as np
 from numpy.typing import ArrayLike
 from scipy.spatial import Delaunay
-from node import Node, compute_distance
+from classes.node import Node, populate_costs
 import os
 from matplotlib import pyplot as plt
-from route import Route
+from classes.route import Route
 
 @dataclass
 class TOPInstance:
@@ -41,9 +41,7 @@ class TOPInstance:
                         nodes[i].adjacent_nodes.append(nodes[j])
                         nodes[j].adjacent_nodes.append(nodes[i])
 
-                        distance = compute_distance(nodes[i], nodes[j])
-                        nodes[i].costs.append(distance)
-                        nodes[j].costs.append(distance)
+            populate_costs(nodes)
 
             # Finally make sure that every node is incident to the source and sinks
             source = nodes[0]
