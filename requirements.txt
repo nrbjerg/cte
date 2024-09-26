@@ -1,1 +1,4 @@
-numpy
+numpy<2
+scipy
+matplotlib
+PyQt5
