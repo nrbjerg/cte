@@ -1,4 +1,5 @@
-from classes.top_instances import TOPInstance
+# %%
+from classes.problem_instances.top_instances import TOPInstance
 from classes.node import Node, populate_costs
 from typing import List, Dict
 from classes.route import Route
