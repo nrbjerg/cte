@@ -141,8 +141,9 @@ class TOPInstance:
         """Creates a TOP plot with routes."""
         self.plot(show = False)
 
+        # NOTE: total score is computed under the assumption that the score of each node can only be collected once.
         node_set = set(sum((route.nodes for route in routes), []))
-        total_score = sum(node.score for node in node_set) # NOTE: total score is computed under the assumption 
+        total_score = sum(node.score for node in node_set) 
         total_distance = sum(route.distance for route in routes)
 
         for route, color in zip(routes, self._colors):

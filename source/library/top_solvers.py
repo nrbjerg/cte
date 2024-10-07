@@ -2,25 +2,24 @@
 from classes.problem_instances.top_instances import TOPInstance, load_TOP_instances
 from classes.route import Route
 from typing import List, Tuple
+from classes.node import Node
 import numpy as np
 from functools import reduce
 import random
 import time 
 import multiprocessing
+from sklearn.cluster import KMeans
+from core.dijskstra import dijkstra
+import matplotlib.pyplot as plt 
 
-def greedy(problem: TOPInstance, p: float = 1.0, use_centroids: bool = True, seed: int = 0) -> List[Route]:
-    """Runs a greedy algorithm on the problem instance"""
+def greedy(problem: TOPInstance, routes: List[Route], p: float = 1.0, seed: int = 0) -> List[Route]:
+    """Runs a greedy algorithm on the problem instance, with initial routes given"""
     random.seed(seed)
 
-    routes = [Route([problem.source]) for _ in range(problem.number_of_agents)]
-    remaining_distances = [problem.t_max for _ in range(problem.number_of_agents)]
+    remaining_distances = [problem.t_max - routes[agent_index].distance for agent_index in range(problem.number_of_agents)]
 
-    if use_centroids:
-        # TODO:
-        pass 
-
-    #visited_nodes = reduce(lambda a, b: a.union(b), map(lambda route: set(route.nodes), routes))
-    unvisited_nodes = set(problem.nodes).difference(set([problem.source])) #visited_nodes)
+    visited_nodes = set(sum([route.nodes for route in routes], []))
+    unvisited_nodes = set(problem.nodes).difference(visited_nodes) 
     
     # Keep going until we reach the sink, in each of the routes.
     for agent_index in range(problem.number_of_agents):
@@ -59,20 +58,41 @@ def greedy(problem: TOPInstance, p: float = 1.0, use_centroids: bool = True, see
                 unvisited_nodes.remove(node_to_append) 
             
     return routes
-    
+
+#def _hill_climbing(initial_routes: List[Route], problem: TOPInstance) -> List[Route]:
+#    """Performs hillclimbing, in order to adaptively improve the routes"""
+#    improved_routes = []
+#    for initial_route in initial_routes:
+#        best_route = initial_route
+#        remove_operator = True
+#        while True:
+#            if remove_operator:
+#                route, change_in_score, change_in_distance = remove_node(best_route, unvisited_nodes)
+#            else:
+#                route, change_in_score, change_in_distance = add_node(best_route, unvisited_nodes)
+#            
+#            if (best_route.score + change_in_score) / (best_route.distance + change_in_distance) > best_route.score / best_route.distance:
+#                best_route = route
+#            else:
+#                if remove_operator
+#
+#    updated_routes = routes
+#                
+#    
+#    return improved_routes# TODO: Add hill climbing
+
 def _worker_function(data) -> List[Route]:
     """The worker function which will be used during the next multi processing step, the data tuple contains a seed and the start time."""
-    (problem, p, use_centroids, seed, baseline_score, time_budget, start_time) = data
-    best_score = baseline_score
-    best_candidate_solution_found = None
+    (problem, p, initial_routes, seed, best_candidate_solution, time_budget, start_time) = data
+    best_score = sum(route.score for route in best_candidate_solution)
     while (time.time() - start_time) < time_budget:
-        candidate_solution = greedy(problem, p = p, use_centroids = use_centroids, seed = seed)
-        # TODO: Add hill climbing
+        candidate_solution = greedy(problem, p = p, routes = initial_routes, seed = seed)
+        #candidate_solution = _hill_climbing(candidate_solution, problem)
 
-        if sum(route.score for route in candidate_solution) > best_score:
-            best_candidate_solution_found = candidate_solution
+        if sum(route.score for route in candidate_solution) >= best_score:
+            best_candidate_solution = candidate_solution
     
-    return best_candidate_solution_found
+    return best_candidate_solution
 
 def grasp(problem: TOPInstance, time_budget: int, p: float, use_centroids: bool = False) -> List[Route]:
     """Runs a greedy adataptive search procedure on the problem instance,
@@ -80,37 +100,41 @@ def grasp(problem: TOPInstance, time_budget: int, p: float, use_centroids: bool 
     candidates are included in the RCL candidates list,
     which contains a total of 1 - p percent of the candidates"""    
     start_time = time.time()
-    #routes = [Route([problem.source], []) for _ in range(problem.number_of_agents)]
 
-    baseline_solution = greedy(problem, use_centroids=use_centroids)
-    baseline_score = sum(route.score for route in baseline_solution)
-    print(f"Greedy Score: {baseline_score}")
+    if use_centroids:
+        np.random.seed(0); random.seed(0)
+        positions = [node.pos for node in problem.nodes[1:-1]]
+        # Maybe use score / distance to source node instead?
+        weights = [node.score / (np.linalg.norm(problem.source.pos - node.pos) ** 2 + node.distance_to_sink ** 2) for node in problem.nodes[1:-1]] 
+        k_means = KMeans(n_clusters = problem.number_of_agents, max_iter = 300).fit(positions, sample_weight = weights)
 
+        # Create routes to the nodes closest to the cluster centers.
+        initial_routes = []
+        for centroid in k_means.cluster_centers_:
+            node_closest_to_centroid = min(problem.nodes, key = lambda node: np.linalg.norm(node.pos - centroid))
+            initial_routes.append(dijkstra(problem.nodes, start = problem.source, end = node_closest_to_centroid))
+            #print(initial_routes[-1].distance, np.linalg.norm(centroid - problem.source.pos), np.linalg.norm(centroid - problem.sink.pos))
+        
+    else:
+        initial_routes = [Route([problem.source]) for _ in range(problem.number_of_agents)]
+
+    baseline_solution = greedy(problem, initial_routes)
+
+    # Runs multilpe iteraitons in parallel
     number_of_cores = multiprocessing.cpu_count()
-    print(f"Number of cores: {number_of_cores}")
-
-
-    # Runs multiple intances of 
     with multiprocessing.Pool(processes=number_of_cores) as pool:
-        arguments = [(problem, p, use_centroids, seed, baseline_score, time_budget, start_time) 
+        arguments = [(problem, p, initial_routes, seed, baseline_solution, time_budget, start_time) 
                      for seed in range(number_of_cores)]
         candidate_solutions = [sol for sol in pool.map(_worker_function, arguments) if sol]
-
-    if len(candidate_solutions) == 0:
-        return baseline_solution
-    
-    else:
-        best_candidate_solution = max(candidate_solutions, key=lambda candidate_solution: sum(route.score for route in candidate_solution))
-        if sum(route.score for route in best_candidate_solution) > baseline_score:
-            return best_candidate_solution
-        else:
-            return baseline_solution
+ 
+    best_candidate_solution = max(candidate_solutions, key=lambda candidate_solution: sum(route.score for route in candidate_solution))
+    return best_candidate_solution
 
 if __name__ == "__main__":
-    top_instance = load_TOP_instances(needs_plotting = True, neighbourhood_level=2)[0]
+    top_instance = load_TOP_instances(needs_plotting = True, neighbourhood_level=1)[0]
     #top_instance.plot()
     print("Running Algorithm")
     #routes = greedy(top_instance, p = 0.7)
-    routes = grasp(top_instance, p = 1, time_budget = 60, use_centroids=False)
+    routes = grasp(top_instance, p = 1, time_budget = 10, use_centroids=True)
     print("Finished Algorithm")
     top_instance.plot_with_routes(routes, plot_points=True)
