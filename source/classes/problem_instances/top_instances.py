@@ -102,10 +102,12 @@ class TOPInstance:
         plt.style.use("seaborn-v0_8-whitegrid")
         plt.gca().set_aspect("equal", adjustable="box")
 
-        for node_id, node in enumerate(self.nodes[2:]):
+        for node_id, node in enumerate(self.nodes):
             for adjacent_node in node.adjacent_nodes:
-                if adjacent_node.node_id > node_id + 2: # Make sure to only plot each edge once, and also dont plot edges to the sink / source.
+                if adjacent_node.node_id in (self.source.node_id, self.sink.node_id):
                     continue
+                #if adjacent_node.node_id > node_id + 1: # Make sure to only plot each edge once, and also dont plot edges to the sink / source.
+                #    continue
 
                 # Plot edges.
                 plt.plot([node.pos[0], adjacent_node.pos[0]], [node.pos[1], adjacent_node.pos[1]], c = "tab:gray", linestyle="dashed", linewidth=0.5, alpha=0.2, zorder=1)
