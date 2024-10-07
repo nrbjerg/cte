@@ -93,4 +93,4 @@ if __name__ == "__main__":
     nodes[7].adjacent_nodes = [nodes[6], nodes[1]] # h
     
     route = dijkstra(nodes, nodes[0], nodes[7])
-    print(route)
+    print(route, route.distance)

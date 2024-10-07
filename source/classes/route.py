@@ -10,12 +10,14 @@ class Route:
     """Models a route via a starting node and a list of indicies, """
     nodes: List[Node]
 
-    @cached_property
+    #@cached_property
+    @property
     def distance(self) -> float:
         """The cost of the route."""
         return sum([np.linalg.norm(fst.pos - snd.pos) for fst, snd in zip(self.nodes[1:], self.nodes[:-1])])
             
-    @cached_property
+    #@cached_property
+    @property
     def score(self) -> float:
         """The score of the route."""
         return sum(node.score for node in self.nodes)
@@ -26,7 +28,7 @@ class Route:
         self.__dict__.pop('score', None)
 
     # NOTE: If indicies arent needed in the future, then we don't need to update them (since we assume that the underlying graph is non-directed.)
-    def reverse(self, update_indicies: bool = True) -> Route: 
+    def reverse(self) -> Route: 
         """Computes the reverse of a route, so if the current route is v_0, v_1, ..., v_n, the reverse will be v_n, v_(n - 1), ..., v_0"""
         return Route(list(reversed(self.nodes)))
 
