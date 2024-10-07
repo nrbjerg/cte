@@ -8,6 +8,7 @@ Angle = float
 
 @dataclass
 class State:
+    """Models a state in SE(2), that is R^2 x [0, 2pi)"""
     pos: Position
     angle: Angle
 
