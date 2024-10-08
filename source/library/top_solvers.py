@@ -71,11 +71,20 @@ def _add_node(route: Route, t_max: float, blacklist: Set[Node]) -> Tuple[Route, 
         # Find the best candidate to add between node0 and node1
         for candidate in candidates:
             distance_through_candidate = np.linalg.norm(node0.pos - candidate.pos) + np.linalg.norm(candidate.pos - node1.pos)
-            change_in_distance =  distance_through_candidate - distance_between_node0_and_node1 
+            change_in_distance = distance_through_candidate - distance_between_node0_and_node1 
+            if change_in_distance == 0:
+               best_candidate = candidate
+               best_idx_to_insert_candidate, best_change_in_distance = idx, change_in_distance
+               break # We have found a node which we can freely add
+
             if (change_in_distance < remaining_distance) and (candidate.score / change_in_distance > best_sdr):
                 best_candidate = candidate
                 best_sdr = candidate.score / change_in_distance
                 best_idx_to_insert_candidate, best_change_in_distance = idx, change_in_distance
+        # If the inner for looop terminates normally, we simply continue otherwise we break out of the current for loop as well 
+        else: 
+            continue
+        break
 
     # Add the candidate to the route
     if best_candidate:
@@ -88,18 +97,21 @@ def _add_node(route: Route, t_max: float, blacklist: Set[Node]) -> Tuple[Route, 
 def _remove_node(route: Route) -> Tuple[Node | None, Route, float, float]:
     """Tries to remove the worst performing node (measured via the SDR) from the route"""
     worst_sdr = np.inf
-    idx_of_worst_candidate = None, None
+    idx_of_worst_candidate = None
 
     for idx, (node0, node1, node2) in enumerate(zip(route.nodes[:-2], route.nodes[1:-1], route.nodes[2:]), 1):
         # Check if node1 should be skiped.
         change_in_distance = np.linalg.norm(node0.pos - node2.pos) - np.linalg.norm(node0.pos - node1.pos) - np.linalg.norm(node1.pos - node2.pos)
-        change_in_score = - node1.score
-        sdr = change_in_score / change_in_distance
-        if sdr < worst_sdr:
-            worst_change_in_distance = change_in_distance
-            worst_change_in_score = change_in_score
-            idx_of_worst_candidate = idx
-            worst_sdr = sdr
+        change_in_score = -node1.score
+        if change_in_distance == 0:
+            continue
+        else:
+            sdr = change_in_score / change_in_distance
+            if sdr < worst_sdr:
+                worst_change_in_distance = change_in_distance
+                worst_change_in_score = change_in_score
+                idx_of_worst_candidate = idx
+                worst_sdr = sdr
 
     if idx_of_worst_candidate:
         new_route = Route(route.nodes[:idx_of_worst_candidate] + route.nodes[idx_of_worst_candidate + 1:])
