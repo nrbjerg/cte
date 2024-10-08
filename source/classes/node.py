@@ -27,7 +27,7 @@ class Node:
         return self.node_id != other.node_id
     
     def __repr__(self):
-        return f"{self.node_id}: ({float(self.pos[0]), float(self.pos[1])}) {self.score}"
+        return f"({self.node_id}: {float(self.pos[0]), float(self.pos[1])} {self.score})"
 
 def compute_cost (v: Node, w: Node) -> float:
     """Computes the euclidian distance between a pair of nodes."""
