@@ -1,32 +1,29 @@
 # %% 
+import copy
+import multiprocessing
+import random
+import time
+from typing import List, Tuple
+
+import numpy as np
 from classes.problem_instances.top_instances import TOPInstance, load_TOP_instances
 from classes.route import Route
-from typing import List, Tuple
-from classes.node import Node
-import numpy as np
-from functools import reduce
-import random
-import time 
-import multiprocessing
-from sklearn.cluster import KMeans
 from core.dijskstra import dijkstra
-import matplotlib.pyplot as plt 
+from sklearn.cluster import KMeans
 
-def greedy(problem: TOPInstance, routes: List[Route], p: float = 1.0, seed: int = 0) -> List[Route]:
+
+def greedy(problem: TOPInstance, routes: List[Route], p: float = 1.0) -> List[Route]:
     """Runs a greedy algorithm on the problem instance, with initial routes given"""
-    random.seed(seed)
-
     remaining_distances = [problem.t_max - routes[agent_index].distance for agent_index in range(problem.number_of_agents)]
 
     visited_nodes = set(sum([route.nodes for route in routes], []))
-    unvisited_nodes = set(problem.nodes).difference(visited_nodes) 
+    unvisited_nodes = set(problem.nodes).difference(visited_nodes).difference([problem.sink])
     
     # Keep going until we reach the sink, in each of the routes.
     for agent_index in range(problem.number_of_agents):
-        while (tail := routes[agent_index].nodes[-1]) != problem.sink: 
+        while (tail := routes[agent_index].nodes[-1]) != problem.sink:
 
             # Compute eligible nodes
-            eligible_nodes = []
             candidates = unvisited_nodes.intersection(set(tail.adjacent_nodes))
 
             # This might be because of the fact that we got stuck in a "corner"
@@ -36,25 +33,24 @@ def greedy(problem: TOPInstance, routes: List[Route], p: float = 1.0, seed: int 
                 candidates = unvisited_nodes
 
             # Only look at the nodes which allows us to subsequently go to the sink.
-            for node in unvisited_nodes:
-                distance_from_tail = np.linalg.norm(tail.pos - node.pos)
-                if distance_from_tail + node.distance_to_sink <= remaining_distances[agent_index]:
-                    eligible_nodes.append(node)
+            eligible_nodes = [node for node in unvisited_nodes if (np.linalg.norm(tail.pos - node.pos) + node.distance_to_sink) <= remaining_distances[agent_index]]
+            if len(eligible_nodes) == 0:
+                routes[agent_index].add_node(problem.sink)
             
-            # Compute the SDR scores
-            sdr_scores = {node.node_id: (node.score / np.linalg.norm(tail.pos - node.pos)) for node in eligible_nodes}
-            
-            # Pick a random node from the RCL list, if p = 1.0, we are simply using a greedy algorithm
-            number_of_nodes = int(np.ceil(len(eligible_nodes) * (1 - p)))
-            if number_of_nodes == 0:
-                number_of_nodes = 1
+            else:
+                sdr_scores = {node.node_id: (node.score / np.linalg.norm(tail.pos - node.pos)) for node in eligible_nodes}
 
-            rcl = sorted(eligible_nodes, key = lambda node: sdr_scores[node.node_id], reverse=True)[:number_of_nodes] # TODO
-            node_to_append = random.choice(rcl)
-            routes[agent_index].add_node(node_to_append) # FIXME: This line causes problems, since the tail is not adjacent to the next node.
-            remaining_distances[agent_index] -= np.linalg.norm(tail.pos - node_to_append.pos)
+                # Pick a random node from the RCL list, if p = 1.0, simply use a normal greedy algorithm
+                if p < 1.0:
+                    number_of_nodes = int(np.ceil(len(eligible_nodes) * (1 - p)))
+                else:
+                    number_of_nodes = 1
+                
+                rcl = sorted(eligible_nodes, key = lambda node: sdr_scores[node.node_id], reverse=True)[:number_of_nodes] # TODO
+                node_to_append = np.random.choice(rcl)
+                routes[agent_index].add_node(node_to_append)
+                remaining_distances[agent_index] -= np.linalg.norm(tail.pos - node_to_append.pos)
 
-            if node_to_append != problem.sink:
                 unvisited_nodes.remove(node_to_append) 
             
     return routes
@@ -81,17 +77,22 @@ def greedy(problem: TOPInstance, routes: List[Route], p: float = 1.0, seed: int 
 #    
 #    return improved_routes# TODO: Add hill climbing
 
-def _worker_function(data: Tuple[TOPInstance, float, List[Route], int, List[Route], int | float, int]) -> List[Route]:
+def _worker_function(data: Tuple[TOPInstance, float, List[Route], int, List[Route], int | float, int, int | None]) -> List[Route]:
     """The worker function which will be used during the next multi processing step, the data tuple contains a seed and the start time."""
-    (problem, p, initial_routes, seed, best_candidate_solution, time_budget, start_time) = data
+    (problem, p, initial_routes, seed, best_candidate_solution, time_budget, start_time, maximum_number_of_iterations) = data
     best_score = sum(route.score for route in best_candidate_solution)
-    while (time.time() - start_time) < time_budget:
-        candidate_solution = greedy(problem, p = p, routes = initial_routes, seed = seed)
-        #candidate_solution = _hill_climbing(candidate_solution, problem)
+    random.seed(seed)
+    iteration_number = 0
+    while (time.time() - start_time) < time_budget and (maximum_number_of_iterations is None or iteration_number < maximum_number_of_iterations):
+        candidate_solution = greedy(problem, p = p, routes = copy.deepcopy(initial_routes)) # FOR SOME REASON THIS ONLY PRODUCE THE SAME ROUTE?
 
-        if sum(route.score for route in candidate_solution) >= best_score:
+        if sum(route.score for route in candidate_solution) > best_score:
             best_candidate_solution = candidate_solution
-        
+            best_score = sum(route.score for route in candidate_solution)
+            print(f"best score found on core {seed}: {best_score}")
+
+        iteration_number += 1
+
     return best_candidate_solution
 
 def grasp(problem: TOPInstance, time_budget: int, p: float, use_centroids: bool = False) -> List[Route]:
@@ -118,24 +119,24 @@ def grasp(problem: TOPInstance, time_budget: int, p: float, use_centroids: bool 
     else:
         initial_routes = [Route([problem.source]) for _ in range(problem.number_of_agents)]
 
-    baseline_solution = greedy(problem, initial_routes)
+    baseline_solution = greedy(problem, copy.deepcopy(initial_routes))
+    print(f"Greedy Score: {sum(route.score for route in baseline_solution)}")
 
     # Runs multilpe iteraitons in parallel
     number_of_cores = multiprocessing.cpu_count()
-    with multiprocessing.Pool(processes=number_of_cores) as pool:
-        arguments = [(problem, p, initial_routes, seed, baseline_solution, time_budget, start_time) 
-                     for seed in range(number_of_cores)]
+    with multiprocessing.Pool(number_of_cores) as pool:
+        arguments = [(problem, p, initial_routes, seed, baseline_solution, time_budget, start_time, None) 
+                     for seed in range(1, number_of_cores + 1)]
         candidate_solutions = [sol for sol in pool.map(_worker_function, arguments)]
  
-    best_candidate_solution = max(candidate_solutions, key=lambda candidate_solution: sum([route.score for route in candidate_solution]))
-    print([route.distance for route in best_candidate_solution], problem.t_max)
+    best_candidate_solution = max(candidate_solutions, key = lambda candidate_solution: sum([route.score for route in candidate_solution]))
     return best_candidate_solution
 
 if __name__ == "__main__":
     top_instance = load_TOP_instances(needs_plotting = True, neighbourhood_level=1)[0]
     #top_instance.plot()
     print("Running Algorithm")
-    #routes = greedy(top_instance, p = 0.7)
-    routes = grasp(top_instance, p = 0.7, time_budget = 30, use_centroids=True)
+    routes = grasp(top_instance, p = 0.8, time_budget = 180, use_centroids=True)
+    print(routes, sum(route.score for route in routes))
     print("Finished Algorithm")
     top_instance.plot_with_routes(routes, plot_points=True)

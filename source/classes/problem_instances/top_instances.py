@@ -147,10 +147,8 @@ class TOPInstance:
         total_distance = sum(route.distance for route in routes)
 
         for route, color in zip(routes, self._colors):
-            xs, ys = [], []
-            for node in route.nodes:
-                xs.append(node.pos[0])
-                ys.append(node.pos[1])
+            xs = [node.pos[0] for node in route.nodes]
+            ys = [node.pos[1] for node in route.nodes]
 
             plt.plot(xs, ys, c = color, zorder=3)
 
