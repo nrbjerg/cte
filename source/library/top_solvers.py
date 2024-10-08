@@ -80,7 +80,6 @@ def _add_node(route: Route, t_max: float, blacklist: Set[Node]) -> Tuple[Route, 
     # Add the candidate to the route
     if best_candidate:
         new_route = Route(route.nodes[:best_idx_to_insert_candidate] + [best_candidate] + route.nodes[best_idx_to_insert_candidate:])
-        #print(f"ADD ({best_candidate.node_id}): {route} -> {new_route}")
         return (best_candidate, new_route, best_change_in_distance, best_candidate.score)
     
     else:
@@ -104,7 +103,6 @@ def _remove_node(route: Route) -> Tuple[Node | None, Route, float, float]:
 
     if idx_of_worst_candidate:
         new_route = Route(route.nodes[:idx_of_worst_candidate] + route.nodes[idx_of_worst_candidate + 1:])
-        #print(f"REMOVE ({route.nodes[idx_of_worst_candidate].node_id}): {route} -> {new_route}")
         return (route.nodes[idx_of_worst_candidate], new_route, worst_change_in_distance, worst_change_in_score)
     else:
         return (None, route, 0, 0)
@@ -189,7 +187,6 @@ def grasp(problem: TOPInstance, time_budget: int, p: float, use_centroids: bool 
         initial_routes = [Route([problem.source]) for _ in range(problem.number_of_agents)]
 
     baseline_solution = greedy(problem, copy.deepcopy(initial_routes))
-    print(f"Greedy Score: {sum(route.score for route in baseline_solution)}")
 
     # Runs multilpe iteraitons in parallel
     number_of_cores = multiprocessing.cpu_count()
@@ -203,7 +200,6 @@ def grasp(problem: TOPInstance, time_budget: int, p: float, use_centroids: bool 
 
 if __name__ == "__main__":
     top_instance = load_TOP_instances(needs_plotting = True, neighbourhood_level=1)[0]
-    #top_instance.plot()
     print("Running Algorithm")
     routes = grasp(top_instance, p = 0.7, time_budget = 10, use_centroids = True)
     print(routes, sum(route.score for route in routes))
