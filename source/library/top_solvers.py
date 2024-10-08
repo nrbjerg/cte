@@ -205,7 +205,7 @@ if __name__ == "__main__":
     top_instance = load_TOP_instances(needs_plotting = True, neighbourhood_level=1)[0]
     #top_instance.plot()
     print("Running Algorithm")
-    routes = grasp(top_instance, p = 0.7, time_budget = 60, use_centroids = True)
+    routes = grasp(top_instance, p = 0.7, time_budget = 10, use_centroids = True)
     print(routes, sum(route.score for route in routes))
     print("Finished Algorithm")
     top_instance.plot_with_routes(routes, plot_points=True)

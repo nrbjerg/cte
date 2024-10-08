@@ -4,3 +4,4 @@ matplotlib
 PyQt5
 gstools
 scikit-learn
+tqdm
