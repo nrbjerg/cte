@@ -58,7 +58,7 @@ class TOPInstance:
 
             colors = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:cyan", "tab:pink", "tab:purple", "tab:brown"] # TODO: add extra colors
             #colors = ["tab:blue", "tab:green", "tab:red", "tab:brown", "tab:pink"] # TODO: add extra colors
-            return TOPInstance(file_name[:-4], number_of_agents, t_max, source, sink, nodes, _colors = colors) 
+            return TOPInstance(file_name[:-4], number_of_agents, t_max, source, sink, nodes, _colors = colors)
  
     @staticmethod
     def _mark_adjacent_nodes_as_adjacent(nodes: List[Node], neighbourhood_level: int = 1) -> List[Node]:
@@ -167,7 +167,7 @@ def load_TOP_instances(needs_plotting: bool = False, neighbourhood_level: int = 
             for file_name in os.listdir(folder_with_top_instances)]
 
 if __name__ == "__main__":
-    first_top_instance = load_TOP_instances(needs_plotting = True, neighbourhood_level = 2)[0]
+    first_top_instance = load_TOP_instances(needs_plotting = True, neighbourhood_level = 1)[80]
     first_top_instance.plot()
     #first_top_instance.plot_with_zones([first_top_instance.nodes[1:20], first_top_instance.nodes[20:40], first_top_instance.nodes[40:60], first_top_instance.nodes[60:80], first_top_instance.nodes[80:-1]])
     #print(first_top_instance.source != first_top_instance.sink)

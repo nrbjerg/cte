@@ -1,0 +1,211 @@
+# %%
+from __future__ import annotations
+from dataclasses import dataclass 
+from typing import List, Tuple, Set
+import numpy as np
+from numpy.typing import ArrayLike
+from scipy.spatial import Delaunay
+from classes.node import Node, populate_costs
+from classes.cpm_route import CPM_Route
+import os
+from matplotlib import pyplot as plt
+from classes.route import Route
+
+plt.rcParams['figure.figsize'] = [9, 9]
+#plt.rcParams['figure.dpi'] = 300
+
+def compute_CPM_HTOP_score(problem_instance: CPM_HTOP_Instance, routes: List[Route], cpm_route: CPM_Route) -> List[float]:
+    """Computes the score of a given solution to a CPM-HTOP problem instance."""
+    pass 
+
+@dataclass
+class CPM_HTOP_Instance:
+    """Stores the data related to a DTOP-HTOP instance."""
+    problem_id: str
+    number_of_agents: int
+    t_max: float
+    cpm_speed_interval: Tuple[float, float]
+    kappa: float
+    d_cpm: float
+    source: Node
+    sink: Node
+    nodes: List[Node]
+    risk_matrix: ArrayLike
+    _colors: List[str] = None
+    _edges_added_to_source_and_sink: Set[Tuple[float, float]] | None = None
+
+    @staticmethod
+    def load_from_file(file_name: str, neighbourhood_level: int = 1, needs_plotting: bool = False) -> CPM_HTOP_Instance:
+        """Loads a TOP instance from a given problem id"""
+        with open(os.path.join(os.getcwd(), "resources", "CPM_HTOP", file_name), "r") as file:
+            lines = list(map(lambda line: line.strip(), file.read().splitlines()))
+            # NOTE: skip the first line which contains information about the number of nodes.
+            N =  int(lines[0].split(" ")[-1])
+            number_of_agents = int(lines[1].split(" ")[-1])
+            t_max = float(lines[2].split(" ")[-1])
+            cpm_speed_interval = (float(lines[3].split(" ")[-1]), float(lines[4].split(" ")[-1]))
+            kappa = float(lines[5].split(" ")[-1])
+            d_cpm = float(lines[6].split(" ")[-1])
+
+            nodes = []
+            risk_matrix = np.zeros(shape=(N, N))
+            for node_id, (x_pos, y_pos, score, *risks) in enumerate(map(lambda line: tuple(map(float, line.split(" "))), lines[7:])):
+                risk_matrix[node_id] = risks
+                pos = np.array([x_pos, y_pos])
+                nodes.append(Node(node_id, [], pos, score))
+            
+            # Perform triangulation, according to the neighbourhood level.
+            edges_added_to_source_and_sink = CPM_HTOP_Instance._mark_adjacent_nodes_as_adjacent(nodes, neighbourhood_level = neighbourhood_level)
+
+            # Finally make sure that every node is incident to the source and sinks.
+            source = nodes[0]
+            sink = nodes[-1]
+
+            # Compute and store the distance to the sink, since this will be used repeatedly.
+            for i, node in enumerate(nodes):
+                nodes[i].distance_to_sink = np.linalg.norm(node.pos - sink.pos)
+                
+            if needs_plotting:
+                # Compute normalized scores for plotting ect if needed.
+                min_score = min([node.score for node in nodes if node.score != 0])
+                max_score = max([node.score for node in nodes])
+
+                node_sizes = [(0.2 + (node.score - min_score) / (max_score - min_score)) * 120 for node in nodes[1:-1]] # Normalized using min-max feature scaling
+                for size, node in zip(node_sizes, nodes[1:-1]):
+                    node.size = size
+
+                # Set colors and return instance
+                colors = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:cyan", "tab:pink", "tab:purple", "tab:brown"] # TODO: add extra colors
+
+                return CPM_HTOP_Instance(file_name[:-4], number_of_agents, t_max, cpm_speed_interval, kappa, d_cpm, source, sink, nodes, risk_matrix, _colors = colors, _edges_added_to_source_and_sink = edges_added_to_source_and_sink)
+
+            else: 
+                return CPM_HTOP_Instance(file_name[:-4], number_of_agents, t_max, cpm_speed_interval, kappa, d_cpm, source, sink, nodes, risk_matrix)
+
+    @staticmethod
+    def _mark_adjacent_nodes_as_adjacent(nodes: List[Node], neighbourhood_level: int = 1) -> Set[Tuple[int, int]]:
+        """Marks adjacent nodes in the delaunay triangulation as being adjacent, additionally use the neighbourhood level, to add extra edges."""
+        positions = [node.pos for node in nodes]
+
+        # Add the edges found in the delaunay triangulation.
+        triangulation = Delaunay(positions)
+        for simplex in triangulation.simplices: # NOTE: A simplicity is simply an N-dimensional triangle
+            for i in simplex:
+                for j in simplex:
+                    if i == j:
+                        continue
+                    nodes[i].adjacent_nodes.append(nodes[j])
+                    nodes[j].adjacent_nodes.append(nodes[i])
+        
+        # Make mark nodes adjacent through a neighbourhood_level number of edges as neighbours.
+        if neighbourhood_level > 1:
+            for i, node in enumerate(nodes):
+                adjacent_nodes = node.adjacent_nodes
+                adjacent_nodes_at_level = node.adjacent_nodes
+                for _ in range(neighbourhood_level - 1):
+                    adjacent_nodes_at_level = sum([adjacent_node.adjacent_nodes for adjacent_node in adjacent_nodes_at_level], [])
+                    adjacent_nodes.extend(adjacent_nodes_at_level) 
+                
+                nodes[i].adjacent_nodes = list(set(adjacent_nodes))
+
+        # Make sure that every node is adjacent to the source and sink nodes
+        edges_added_to_source_and_sink = set()
+        for i, node in enumerate(nodes):
+            if (i != 0) and (not (nodes[0] in node.adjacent_nodes)):
+                nodes[i].adjacent_nodes.append(nodes[0])
+                edges_added_to_source_and_sink.add((i, 0)) # We dont want to display these edges 
+
+            if (i != len(nodes) - 1) and (not (nodes[-1] in node.adjacent_nodes)):
+                nodes[i].adjacent_nodes.append(nodes[-1])
+                edges_added_to_source_and_sink.add((i, len(nodes) - 1)) # We dont want to display these edges 
+
+        return edges_added_to_source_and_sink
+
+
+    def plot (self, show: bool = True, plot_nodes: bool = True, edges_to_exclude: Set[Tuple[int, int]] = set()):
+        """Displays a plot of the problem instance, along with its delauney triangulation"""
+        plt.style.use("seaborn-v0_8-whitegrid")
+        plt.gca().set_aspect("equal", adjustable="box")
+
+        edges_plotted = set()
+        for node in self.nodes: 
+            for adjacent_node in node.adjacent_nodes:
+                tup = (node.node_id, adjacent_node.node_id)
+                if (tup in edges_plotted) or (tup in self._edges_added_to_source_and_sink) or (tup in edges_to_exclude) or (reversed(tup) in edges_to_exclude):
+                    continue
+
+                plt.plot([node.pos[0],adjacent_node.pos[0]], [node.pos[1], adjacent_node.pos[1]], 
+                         c= "tab:gray", 
+                         linewidth=20 * (0.005 + self.risk_matrix[node.node_id, adjacent_node.node_id]),
+                         alpha=0.25 + 3 * self.risk_matrix[node.node_id, adjacent_node.node_id], zorder=1)
+
+                # Don't plot the edge going in the opisite direction
+                edges_plotted.add((adjacent_node.node_id, node.node_id)) 
+
+        # Plot nodes
+        plt.scatter(*self.source.pos, 120, marker = "s", c = "black", zorder=4)
+        plt.scatter(*self.sink.pos, 120, marker = "D", c = "black", zorder=4)
+
+        plt.title(f"CPM-HTOP: {self.problem_id}")
+        if plot_nodes:
+            sizes = [node.size for node in self.nodes[1:-1]] 
+            plt.scatter([node.pos[0] for node in self.nodes[1:-1]], [node.pos[1] for node in self.nodes[1:-1]], sizes, c = "tab:gray", zorder=2)
+
+        if show:
+            plt.show()
+
+    def plot_with_zones(self, zones: List[List[Node]], show: bool = True):
+        """Plots the top instance with zones."""
+        self.plot(show = False, plot_nodes = False)
+        
+        for zone, color in zip(zones, self._colors):
+            sizes = [node.size for node in zone] # NOTE: Each zone includes the source and sink to make path planing easier
+            xs = [node.pos[0] for node in zone] 
+            ys = [node.pos[1] for node in zone]
+            plt.scatter(xs, ys, sizes, c = color, zorder=3)
+
+        if show:
+            plt.show()
+
+    def plot_with_routes(self, routes: List[Route], plot_points: bool = False, show: bool = True):
+        """Creates a TOP plot with routes."""
+        edges_to_exclude = set(sum(
+            (node.node_id, adjacent_node.node_id) for node, adjacent_node in zip(route.nodes[:-1], route.nodes[:-1])
+        ) for route in routes)
+
+        self.plot(show = False, edges_to_exclude=edges_to_exclude)
+
+        for route, color in zip(routes, self._colors):
+            for node, adjacent_node in zip(route.nodes[:-1], route.nodes[1:]):
+                plt.plot([node.pos[0],adjacent_node.pos[0]], [node.pos[1], adjacent_node.pos[1]], c= color, linewidth=20 * (0.005 + self.risk_matrix[node.node_id, adjacent_node.node_id]), zorder=1)
+
+            if plot_points:
+                # NOTE: this works once the route is connected to the sink.
+                xs = [node.pos[0] for node in route.nodes]
+                ys = [node.pos[1] for node in route.nodes]
+                plt.scatter(xs[1:-1], ys[1:-1], [node.size for node in route.nodes[1:-1]], c = color, zorder=3) 
+
+        if show:
+            plt.show()
+
+    def plot_CPM_HTOP_solution(self, routes: List[Route], cpm_route: CPM_Route, show: bool = True):
+        """Plots a CPM-HTOP solution, ie. a set of UAV routes and a CPM route"""
+        self.plot_with_routes(routes, plot_points=True, show=False)
+
+        # TODO plot cpm route!
+
+        scores = compute_CPM_HTOP_score(self, routes, cpm_route)
+        if show:
+            plt.legend([f"UAV {idx}: {score}" for idx, score in enumerate(scores[:-1])] + [f"CPM: {scores[-1]}"])
+            plt.show()
+
+
+def load_CPM_HTOP_instances(needs_plotting: bool = False, neighbourhood_level: int = 1) -> List[CPM_HTOP_Instance]:
+    """Loads the set of TOP instances saved within the resources folder."""
+    folder_with_top_instances = os.path.join(os.getcwd(), "resources", "CPM_HTOP")
+    return [CPM_HTOP_Instance.load_from_file(file_name, needs_plotting = needs_plotting, neighbourhood_level = neighbourhood_level) 
+            for file_name in os.listdir(folder_with_top_instances)]
+
+if __name__ == "__main__":
+    first_cpm_htop_instance = load_CPM_HTOP_instances(needs_plotting = True, neighbourhood_level = 1)[0]
+    first_cpm_htop_instance.plot()

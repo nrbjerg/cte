@@ -1,8 +1,0 @@
-README.md
-pyproject.toml
-setup.cfg
-setup.py
-cte.egg-info/PKG-INFO
-cte.egg-info/SOURCES.txt
-cte.egg-info/dependency_links.txt
-cte.egg-info/top_level.txt
