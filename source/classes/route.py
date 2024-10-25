@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from classes.node import Node
 from functools import cached_property
+from classes.data_types import Position
 from typing import List
 import numpy as np
 
@@ -33,7 +34,6 @@ class Route:
         self.__dict__.pop('cost', None)
         self.__dict__.pop('score', None)
 
-    # NOTE: If indicies arent needed in the future, then we don't need to update them (since we assume that the underlying graph is non-directed.)
     def reverse(self) -> Route: 
         """Computes the reverse of a route, so if the current route is v_0, v_1, ..., v_n, the reverse will be v_n, v_(n - 1), ..., v_0"""
         return Route(list(reversed(self.nodes)))
@@ -50,3 +50,14 @@ class Route:
     def get_node_ids (self) -> List[int]:
         """Returns the node ids in the order specified by the route."""
         return [node.node_id for node in self.nodes]
+
+    def get_position_at_time(self, time: float) -> Position:
+        """Computes the agents position at time t."""
+        remaining_time = time
+        for fst, snd in zip(self.nodes[1:], self.nodes[-1]):
+            time_used_to_traverse_edge = np.linalg.norm(fst.pos - snd.pos) / self.speed
+            if remaining_time <= time_used_to_traverse_edge:
+                propotion_between_fst_and_snd = remaining_time / time_used_to_traverse_edge
+                return fst.pos * (1 - propotion_between_fst_and_snd) + snd.pos * propotion_between_fst_and_snd
+
+        return self.nodes[-1].pos # Otherwise we are at the sink.
