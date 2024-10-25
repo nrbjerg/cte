@@ -144,7 +144,7 @@ class CPM_HTOP_Instance:
 
         # Plot nodes
         plt.scatter(*self.source.pos, 120, marker = "s", c = "black", zorder=4)
-        plt.scatter(*self.sink.pos, 120, marker = "D", c = "black", zorder=4)
+        plt.scatter(*self.sink.pos, 120, marker = "^", c = "black", zorder=4)
 
         plt.title(f"CPM-HTOP: {self.problem_id}")
         if plot_nodes:
@@ -207,5 +207,7 @@ def load_CPM_HTOP_instances(needs_plotting: bool = False, neighbourhood_level: i
             for file_name in os.listdir(folder_with_top_instances)]
 
 if __name__ == "__main__":
-    first_cpm_htop_instance = load_CPM_HTOP_instances(needs_plotting = True, neighbourhood_level = 1)[0]
+
+    first_cpm_htop_instance = CPM_HTOP_Instance.load_from_file("p4.2.a.0.txt", needs_plotting=True)
+    #first_cpm_htop_instance = load_CPM_HTOP_instances(needs_plotting = True, neighbourhood_level = 1)[0]
     first_cpm_htop_instance.plot()
