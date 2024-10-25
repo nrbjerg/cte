@@ -9,12 +9,18 @@ import numpy as np
 class Route:
     """Models a route via a starting node and a list of indicies, """
     nodes: List[Node]
+    speed: float = 1.0 # Should remained fixed at one for CPM-HTOP
 
     #@cached_property
     @property
     def distance(self) -> float:
         """The cost of the route."""
         return sum([np.linalg.norm(fst.pos - snd.pos) for fst, snd in zip(self.nodes[1:], self.nodes[:-1])])
+
+    @property
+    def visit_times(self) -> List[float]:
+        """Computes the times when the nodes are visisted"""
+        return [np.linalg.norm(fst.pos - snd.pos) / self.speed for fst, snd in zip(self.nodes[1:], self.nodes[:-1])]
             
     #@cached_property
     @property
