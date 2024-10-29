@@ -5,6 +5,7 @@ from typing import Tuple
 
 Position = ArrayLike
 Velocity = ArrayLike
+Matrix = ArrayLike
 Angle = float
 
 @dataclass

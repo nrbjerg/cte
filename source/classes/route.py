@@ -21,7 +21,11 @@ class Route:
     @property
     def visit_times(self) -> List[float]:
         """Computes the times when the nodes are visisted"""
-        return [np.linalg.norm(fst.pos - snd.pos) / self.speed for fst, snd in zip(self.nodes[1:], self.nodes[:-1])]
+        distances = [np.linalg.norm(fst.pos - snd.pos) for fst, snd in zip(self.nodes[1:], self.nodes[:-1])]
+        visit_times = [0]
+        for distance in distances:
+            visit_times.append(visit_times[-1] + distance / self.speed)
+        return visit_times
             
     #@cached_property
     @property
@@ -53,11 +57,16 @@ class Route:
 
     def get_position_at_time(self, time: float) -> Position:
         """Computes the agents position at time t."""
+        if time < 0:
+            raise ValueError("Cannot go back in time! ;)")
+
         remaining_time = time
-        for fst, snd in zip(self.nodes[1:], self.nodes[-1]):
+        for fst, snd in zip(self.nodes[:-1], self.nodes[1:]):
             time_used_to_traverse_edge = np.linalg.norm(fst.pos - snd.pos) / self.speed
             if remaining_time <= time_used_to_traverse_edge:
                 propotion_between_fst_and_snd = remaining_time / time_used_to_traverse_edge
                 return fst.pos * (1 - propotion_between_fst_and_snd) + snd.pos * propotion_between_fst_and_snd
+            else:
+                remaining_time -= time_used_to_traverse_edge
 
         return self.nodes[-1].pos # Otherwise we are at the sink.
