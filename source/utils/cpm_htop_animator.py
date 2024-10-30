@@ -1,6 +1,7 @@
+# %%
 from classes.route import Route
 from library.cpm_htop_solvers import grasp
-from core.euclid_interception import EuclidianInterceptionRoute
+from core.interception.euclidian_intercepter import EuclidianInterceptionRoute
 from classes.problem_instances.cpm_htop_instances import CPM_HTOP_Instance
 from typing import List
 import os 
@@ -8,20 +9,19 @@ from matplotlib import pyplot as plt
 from matplotlib import animation
 import numpy as np
 
-def animate(cpm_htop_instance: CPM_HTOP_Instance, routes: List[Route], euclidian_interception_route: EuclidianInterceptionRoute):
+def animate(cpm_htop_instance: CPM_HTOP_Instance, routes: List[Route], euclidian_interception_route: EuclidianInterceptionRoute, number_of_frames: int = 600):
     """Creates an animation based on the CPM-HTOP instance, a set of routes and an euclidian interception route."""
     fig, _ = plt.subplots()
-    t = np.linspace(0, cpm_htop_instance.t_max, 300)
-    print(cpm_htop_instance.t_max)
+    t = np.linspace(0, cpm_htop_instance.t_max, number_of_frames)
 
     cpm_htop_instance.plot_with_routes(routes, plot_points=True, show=False)
     euclidian_interception_route.plot(show=False)
 
-    cpm_scat = plt.scatter(*euclidian_interception_route.get_position_at_time(0), c="tab:red") 
+    cpm_scat = plt.scatter(*euclidian_interception_route.get_position_at_time(0), c="tab:red",  s=80, zorder=5) 
     uav_positions = [route.get_position_at_time(0) for route in routes]
     xs = [pos[0] for pos in uav_positions]
     ys = [pos[1] for pos in uav_positions]
-    uav_scat = plt.scatter(xs, ys, c = cpm_htop_instance._colors[:len(routes)])
+    uav_scat = plt.scatter(xs, ys, c = cpm_htop_instance._colors[:len(routes)], s=80, zorder=1)
 
     def update(frame):
         """Updates the figure"""
@@ -35,10 +35,8 @@ def animate(cpm_htop_instance: CPM_HTOP_Instance, routes: List[Route], euclidian
 
         return cpm_scat, uav_scat
 
-    _ = animation.FuncAnimation(fig=fig, func=update, frames=300, interval=30)
+    _ = animation.FuncAnimation(fig=fig, func=update, frames=number_of_frames, interval=30)
     plt.show()
-    
-
 
 if __name__ == "__main__":
     folder_with_top_instances = os.path.join(os.getcwd(), "resources", "CPM_HTOP") 
@@ -46,5 +44,5 @@ if __name__ == "__main__":
     print("Running Algorithm")
     routes = grasp(cpm_htop_instance, p = 0.7, time_budget = 10, use_centroids = True)
     print("Finished Algorithm")
-    euclidian_interception_route = EuclidianInterceptionRoute(cpm_htop_instance.source.pos, [0, 2, 1, 0, 1, 2, 0], routes, 1.6, cpm_htop_instance.sink.pos, waiting_time=1)
+    euclidian_interception_route = EuclidianInterceptionRoute(cpm_htop_instance.source.pos, [0, 2, 1, 0, 1, 2, 0], routes, 1.6, cpm_htop_instance.sink.pos, delay=1)
     animate(cpm_htop_instance, routes, euclidian_interception_route)

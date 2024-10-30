@@ -12,7 +12,7 @@ from classes.problem_instances.cpm_htop_instances import CPM_HTOP_Instance, load
 from classes.node import Node
 from classes.route import Route
 from core.dijskstra import dijkstra
-from core.euclid_interception import EuclidianInterceptionRoute
+from core.interception.euclidian_intercepter import EuclidianInterceptionRoute
 from sklearn.cluster import KMeans
 
 
