@@ -10,13 +10,54 @@ from classes.cpm_route import CPM_Route
 import os
 from matplotlib import pyplot as plt
 from classes.route import Route
+from classes.data_types import Matrix
+from core.interception.intercepter import InterceptionRoute
+from math import prod
 
 plt.rcParams['figure.figsize'] = [9, 9]
 #plt.rcParams['figure.dpi'] = 300
 
-def compute_CPM_HTOP_score(problem_instance: CPM_HTOP_Instance, routes: List[Route], cpm_route: CPM_Route) -> List[float]:
+# NOTE: This function takes an interception route to be able to use both a dubins intercepter and an euclidian intercepter.
+def compute_CPM_HTOP_score(problem_instance: CPM_HTOP_Instance, routes: List[Route], cpm_route: InterceptionRoute) -> float:
     """Computes the score of a given solution to a CPM-HTOP problem instance."""
-    pass 
+
+    def sigma(k: int, i: int) -> float:
+        """Computes the probability of UAV k remaining operational until the CPM has reached interception point i"""
+        if k >= len(routes) or k < 0:
+            raise ValueError(f"Invalid k={k} supplied!")
+        
+        if i < len(cpm_route.route_indicies): 
+            # In this case compute the probability that UAV k remains operational until the CPM has reached point i
+            time_of_ith_interception = cpm_route.time_until_interception(i)
+            j = max(idx for idx, visit_time in enumerate(routes[k].visit_times) if visit_time > time_of_ith_interception)
+            return prod(1 - problem_instance.risk_matrix[fst.node_id, snd.node_id] for fst, snd in zip(routes[k].nodes[:j - 1], routes[k].nodes[1:j]))
+
+        else:
+            # In this case compute the probability that UAV k remains operational until it reaches the sink
+            return prod(1 - problem_instance.risk_matrix[fst.node_id, snd.node_id] for fst, snd in zip(routes[k].nodes[:-1], routes[k].nodes[1:]))
+        
+    # Compute expected score of CPM 
+    expected_score_of_cpm = 0
+    nodes_whose_scores_have_already_been_extracted_by_cpm = set()
+    for i, k in enumerate(cpm_route.route_indicies):
+        time_of_ith_interception = cpm_route.time_until_interception(i)
+
+        j = max(idx for idx, visit_time in enumerate(routes[k].visit_times) if visit_time > time_of_ith_interception)
+        if j == len(routes[k].nodes) - 1:
+            continue
+
+        new_nodes_which_has_been_visited_by_uav = set(route.nodes[:j]).difference(nodes_whose_scores_have_already_been_extracted_by_cpm)
+        expected_score_of_cpm += sigma(k, i) * sum(node.score for node in new_nodes_which_has_been_visited_by_uav)
+
+    # Compute expected remaining scores of UAVs
+    expected_scores_of_uavs = []
+    for route in routes:
+        # NOTE: we do not need sure that we dont count the scores twice if the UAV collects the scores once the route has been terminated.
+        #       since we are using the set "nodes_whose_scores_have_already_been_extracted_by_cpm"!
+        total_remaining_score = sum(node.score for node in set(route.nodes).difference(nodes_whose_scores_have_already_been_extracted_by_cpm))
+        expected_scores_of_uavs.append(sigma(k, len(cpm_route.route_indicies)) * total_remaining_score)
+
+    return sum(expected_scores_of_uavs) + expected_score_of_cpm
 
 @dataclass
 class CPM_HTOP_Instance:
@@ -24,13 +65,13 @@ class CPM_HTOP_Instance:
     problem_id: str
     number_of_agents: int
     t_max: float
-    cpm_speed_interval: Tuple[float, float]
+    cpm_speed: Tuple[float, float]
     kappa: float
     d_cpm: float
     source: Node
     sink: Node
     nodes: List[Node]
-    risk_matrix: ArrayLike
+    risk_matrix: Matrix
     _colors: List[str] = None
     _edges_added_to_source_and_sink: Set[Tuple[float, float]] | None = None
 
@@ -75,7 +116,7 @@ class CPM_HTOP_Instance:
                     node.size = size
 
                 # Set colors and return instance
-                colors = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:cyan", "tab:pink", "tab:purple", "tab:brown"] # TODO: add extra colors
+                colors = ["tab:blue", "tab:orange", "tab:green", "tab:red"] # TODO: add extra colors
 
                 return CPM_HTOP_Instance(file_name[:-4], number_of_agents, t_max, cpm_speed_interval, kappa, d_cpm, source, sink, nodes, risk_matrix, _colors = colors, _edges_added_to_source_and_sink = edges_added_to_source_and_sink)
 
@@ -143,8 +184,8 @@ class CPM_HTOP_Instance:
                 edges_plotted.add((adjacent_node.node_id, node.node_id)) 
 
         # Plot nodes
-        plt.scatter(*self.source.pos, 120, marker = "s", c = "black", zorder=4)
-        plt.scatter(*self.sink.pos, 120, marker = "^", c = "black", zorder=4)
+        plt.scatter(*self.source.pos, 120, marker = "s", c = "black", zorder=10)
+        plt.scatter(*self.sink.pos, 120, marker = "^", c = "black", zorder=10)
 
         plt.title(f"CPM-HTOP: {self.problem_id}")
         if plot_nodes:
@@ -169,9 +210,7 @@ class CPM_HTOP_Instance:
 
     def plot_with_routes(self, routes: List[Route], plot_points: bool = False, show: bool = True):
         """Creates a TOP plot with routes."""
-        edges_to_exclude = set(sum(
-            (node.node_id, adjacent_node.node_id) for node, adjacent_node in zip(route.nodes[:-1], route.nodes[:-1])
-        ) for route in routes)
+        edges_to_exclude = set(sum([[(fst.node_id, snd.node_id) for fst, snd in zip(route.nodes[:-1], route.nodes[1:])] for route in routes], []))
 
         self.plot(show = False, edges_to_exclude=edges_to_exclude)
 
