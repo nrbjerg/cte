@@ -59,7 +59,7 @@ def compute_CPM_HTOP_scores(problem_instance: CPM_HTOP_Instance, routes: List[Ro
 
     return expected_scores_of_uavs + [expected_score_of_cpm]
 
-def compute_CPM_HTOP_scores(problem_instance: CPM_HTOP_Instance, routes: List[Route], cpm_route: InterceptionRoute) -> float:
+def compute_CPM_HTOP_score(problem_instance: CPM_HTOP_Instance, routes: List[Route], cpm_route: InterceptionRoute) -> float:
     """Computes the scores of each UAV and the CPM of a given solution to a CPM-HTOP problem instance."""
     return sum(compute_CPM_HTOP_scores(problem_instance, routes, cpm_route))
 
@@ -237,7 +237,7 @@ class CPM_HTOP_Instance:
 
         cpm_route.plot()
 
-        scores = compute_CPM_HTOP_score(self, routes, cpm_route)
+        scores = compute_CPM_HTOP_scores(self, routes, cpm_route)
         if show:
             plt.legend([f"UAV {idx}: {score}" for idx, score in enumerate(scores[:-1])] + [f"CPM: {scores[-1]}"])
             plt.show()
