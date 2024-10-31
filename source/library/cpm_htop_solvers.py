@@ -3,7 +3,7 @@ import copy
 import multiprocessing
 import random
 import time
-from typing import List, Tuple, Set
+from typing import List, Tuple, Set, Callable
 import os 
 import matplotlib.pyplot as plt
 
@@ -11,15 +11,23 @@ import numpy as np
 from classes.problem_instances.cpm_htop_instances import CPM_HTOP_Instance, load_CPM_HTOP_instances
 from classes.node import Node
 from classes.route import Route
-from core.dijskstra import dijkstra
-from core.interception.euclidian_intercepter import EuclidianInterceptionRoute
+from library.core.dijskstra import dijkstra
+from library.core.interception.euclidian_intercepter import EuclidianInterceptionRoute
 from sklearn.cluster import KMeans
 
+def risk_aware_sdr(problem: CPM_HTOP_Instance, tail: Node, node: Node) -> float:
+    """Computes a risk aware score distance ratio (SDR) score."""
+    return node.score * (1 - problem.risk_matrix[tail.node_id, node.node_id]) / np.linalg.norm(tail.pos - node.pos)
 
-def greedy(problem: CPM_HTOP_Instance, routes: List[Route], p: float = 1.0) -> List[Route]:
+def weight_for_clustering(problem: CPM_HTOP_Instance, node: Node) -> float:
+    """Computes the weight assigned to the node, when / if doing clustering as an initial step in the GRASP implementation."""
+    survival_probability = (1 - problem.risk_matrix[problem.source.node_id, node.node_id]) * (1 - problem.risk_matrix[problem.sink.node_id, node.node_id])
+    return node.score * survival_probability / (np.linalg.norm(problem.source.pos - node.pos) ** 2 + node.distance_to_sink ** 2)
+
+def greedy(problem: CPM_HTOP_Instance, routes: List[Route], p: float = 1.0, score_heuristic: Callable[[CPM_HTOP_Instance, Node, Node], float] = risk_aware_sdr) -> List[Route]:
     """Runs a greedy algorithm on the problem instance, with initial routes given"""
     remaining_distances = [problem.t_max - routes[agent_index].distance for agent_index in range(problem.number_of_agents)]
-
+    
     visited_nodes = set(sum([route.nodes for route in routes], []))
     unvisited_nodes = set(problem.nodes).difference(visited_nodes).difference([problem.sink])
     
@@ -43,7 +51,7 @@ def greedy(problem: CPM_HTOP_Instance, routes: List[Route], p: float = 1.0) -> L
                 routes[agent_index].add_node(problem.sink)
             
             else:
-                sdr_scores = {node.node_id: (node.score / np.linalg.norm(tail.pos - node.pos)) for node in eligible_nodes}
+                scores = {node.node_id: score_heuristic(problem, tail, node) for node in eligible_nodes}
 
                 # Pick a random node from the RCL list, if p = 1.0, simply use a normal greedy algorithm
                 if p < 1.0:
@@ -51,7 +59,7 @@ def greedy(problem: CPM_HTOP_Instance, routes: List[Route], p: float = 1.0) -> L
                 else:
                     number_of_nodes = 1
                 
-                rcl = sorted(eligible_nodes, key = lambda node: sdr_scores[node.node_id], reverse=True)[:number_of_nodes] # TODO
+                rcl = sorted(eligible_nodes, key = lambda node: scores[node.node_id], reverse=True)[:number_of_nodes] # TODO
                 node_to_append = np.random.choice(rcl)
                 routes[agent_index].add_node(node_to_append)
                 remaining_distances[agent_index] -= np.linalg.norm(tail.pos - node_to_append.pos)
@@ -153,7 +161,7 @@ def _hill_climbing(initial_solution: List[Route], t_max: float) -> List[Route]: 
 
         updated_routes.append(best_route)
                         
-    return updated_routes # TODO: Add hill climbing
+    return updated_routes 
 
 def _worker_function(data: Tuple[CPM_HTOP_Instance, float, List[Route], int, List[Route], int | float, int, int | None]) -> List[Route]:
     """The worker function which will be used during the next multi processing step, the data tuple contains a seed and the start time."""
@@ -189,15 +197,22 @@ def grasp(problem: CPM_HTOP_Instance, time_budget: int, p: float, use_centroids:
         random.seed(0)
 
         positions = [node.pos for node in problem.nodes[1:-1]]
-        weights = [node.score / (np.linalg.norm(problem.source.pos - node.pos) ** 2 + node.distance_to_sink ** 2) for node in problem.nodes[1:-1]] 
+        # Instead of taking the total risk into account, we take into acount the risk of traversing the
+        # edge from the source to the node and the edge from the node to the sink.
+        weights = [weight_for_clustering(problem, node) for node in problem.nodes[1:-1]] 
         k_means = KMeans(n_clusters = problem.number_of_agents, max_iter = 300).fit(positions, sample_weight = weights)
 
         # Create routes to the nodes closest to the cluster centers.
         initial_routes = []
         for centroid in k_means.cluster_centers_:
             node_closest_to_centroid = min(problem.nodes, key = lambda node: np.linalg.norm(node.pos - centroid))
-            initial_routes.append(dijkstra(problem.nodes, start = problem.source, end = node_closest_to_centroid))
-        
+            candidate_route = dijkstra(problem.nodes, start = problem.source, end = node_closest_to_centroid)
+            
+            # Check that the routes to the nodes closest to the centroid can reach the sink.
+            if candidate_route.nodes[-1].distance_to_sink <= problem.t_max - candidate_route.distance:
+                initial_routes.append(candidate_route)
+            else:
+                initial_routes.append(Route([problem.source]))
     else:
         initial_routes = [Route([problem.source]) for _ in range(problem.number_of_agents)]
 
@@ -222,3 +237,5 @@ if __name__ == "__main__":
     euclidian_interception_route = EuclidianInterceptionRoute(cpm_htop_instance.source.pos, [0, 2, 1, 0, 2, 1, 0], routes, 1.6, waiting_time=1)
     cpm_htop_instance.plot_with_routes(routes, plot_points=True, show=False)
     euclidian_interception_route.plot()
+
+# %%

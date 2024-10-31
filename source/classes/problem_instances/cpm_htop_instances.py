@@ -11,7 +11,7 @@ import os
 from matplotlib import pyplot as plt
 from classes.route import Route
 from classes.data_types import Matrix
-from core.interception.intercepter import InterceptionRoute
+from library.core.interception.intercepter import InterceptionRoute
 from math import prod
 
 plt.rcParams['figure.figsize'] = [9, 9]
@@ -65,7 +65,7 @@ class CPM_HTOP_Instance:
     problem_id: str
     number_of_agents: int
     t_max: float
-    cpm_speed: Tuple[float, float]
+    cpm_speed: float
     kappa: float
     d_cpm: float
     source: Node
@@ -73,7 +73,7 @@ class CPM_HTOP_Instance:
     nodes: List[Node]
     risk_matrix: Matrix
     _colors: List[str] = None
-    _edges_added_to_source_and_sink: Set[Tuple[float, float]] | None = None
+    _edges_added_to_source_and_sink: Set[Tuple[int, int]] | None = None
 
     @staticmethod
     def load_from_file(file_name: str, neighbourhood_level: int = 1, needs_plotting: bool = False) -> CPM_HTOP_Instance:
@@ -84,7 +84,7 @@ class CPM_HTOP_Instance:
             N =  int(lines[0].split(" ")[-1])
             number_of_agents = int(lines[1].split(" ")[-1])
             t_max = float(lines[2].split(" ")[-1])
-            cpm_speed_interval = (float(lines[3].split(" ")[-1]), float(lines[4].split(" ")[-1]))
+            cpm_speed = (float(lines[3].split(" ")[-1]), float(lines[4].split(" ")[-1]))[1] # TODO: Update to have the CPM have a specific speed 
             kappa = float(lines[5].split(" ")[-1])
             d_cpm = float(lines[6].split(" ")[-1])
 
@@ -118,10 +118,10 @@ class CPM_HTOP_Instance:
                 # Set colors and return instance
                 colors = ["tab:blue", "tab:orange", "tab:green", "tab:red"] # TODO: add extra colors
 
-                return CPM_HTOP_Instance(file_name[:-4], number_of_agents, t_max, cpm_speed_interval, kappa, d_cpm, source, sink, nodes, risk_matrix, _colors = colors, _edges_added_to_source_and_sink = edges_added_to_source_and_sink)
+                return CPM_HTOP_Instance(file_name[:-4], number_of_agents, t_max, cpm_speed, kappa, d_cpm, source, sink, nodes, risk_matrix, _colors = colors, _edges_added_to_source_and_sink = edges_added_to_source_and_sink)
 
             else: 
-                return CPM_HTOP_Instance(file_name[:-4], number_of_agents, t_max, cpm_speed_interval, kappa, d_cpm, source, sink, nodes, risk_matrix)
+                return CPM_HTOP_Instance(file_name[:-4], number_of_agents, t_max, cpm_speed, kappa, d_cpm, source, sink, nodes, risk_matrix)
 
     @staticmethod
     def _mark_adjacent_nodes_as_adjacent(nodes: List[Node], neighbourhood_level: int = 1) -> Set[Tuple[int, int]]:
@@ -227,17 +227,21 @@ class CPM_HTOP_Instance:
         if show:
             plt.show()
 
-    def plot_CPM_HTOP_solution(self, routes: List[Route], cpm_route: CPM_Route, show: bool = True):
+    def plot_CPM_HTOP_solution(self, routes: List[Route], cpm_route: InterceptionRoute, show: bool = True):
         """Plots a CPM-HTOP solution, ie. a set of UAV routes and a CPM route"""
         self.plot_with_routes(routes, plot_points=True, show=False)
 
-        # TODO plot cpm route!
+        cpm_route.plot()
 
         scores = compute_CPM_HTOP_score(self, routes, cpm_route)
         if show:
             plt.legend([f"UAV {idx}: {score}" for idx, score in enumerate(scores[:-1])] + [f"CPM: {scores[-1]}"])
             plt.show()
 
+    def compute_risk_of_route(self, route: Route) -> float:
+        """Computes the total risk of traversing a route, using the risk matrix"""
+        probability_of_survival = prod(1 - self.risk_matrix[fst.node_id, snd.node_id] for fst, snd in zip(route.nodes[:-1], route.nodes[1:]))
+        return 1 - probability_of_survival
 
 def load_CPM_HTOP_instances(needs_plotting: bool = False, neighbourhood_level: int = 1) -> List[CPM_HTOP_Instance]:
     """Loads the set of TOP instances saved within the resources folder."""

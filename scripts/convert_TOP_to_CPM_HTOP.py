@@ -67,7 +67,7 @@ for idx, file_id in tqdm(enumerate(list(os.listdir(path_to_TOP_instances)))):
             heat_map[i, j] = f([x, y])
 
     t_max = float(info[-1].split(" ")[-1])
-    slow, fast = {"Vmax": 1.6, "Vmin": 1.4, "kappa": 1}, {"Vmax": 1.8, "Vmin": 1.6, "kappa": 1.3}
+    slow, fast = {"V_cpm": 1.4, "kappa": 1}, {"V_cpm": 1.8, "kappa": 1.3}
     short, long = {"dmax": round(1.2 * t_max, 4)}, {"dmax": round(1.4 * t_max, 4)}
 
     for idx, (speed, distance) in enumerate([(slow, short), (fast, short), (slow, long), (fast, long)]):

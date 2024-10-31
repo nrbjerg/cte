@@ -55,7 +55,7 @@ class Route:
         """Returns the node ids in the order specified by the route."""
         return [node.node_id for node in self.nodes]
 
-    def get_position_at_time(self, time: float) -> Position:
+    def get_position(self, time: float) -> Position:
         """Computes the agents position at time t."""
         if time < 0:
             raise ValueError("Cannot go back in time! ;)")

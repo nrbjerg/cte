@@ -9,7 +9,7 @@ import numpy as np
 from classes.problem_instances.top_instances import TOPInstance, load_TOP_instances
 from classes.node import Node
 from classes.route import Route
-from core.dijskstra import dijkstra
+from library.core.dijskstra import dijkstra
 from sklearn.cluster import KMeans
 
 
