@@ -13,11 +13,13 @@ from classes.route import Route
 from classes.data_types import Matrix
 from library.core.interception.intercepter import InterceptionRoute
 from math import prod
+import matplotlib.lines as mlines
 
 plt.rcParams['figure.figsize'] = [9, 9]
 #plt.rcParams['figure.dpi'] = 300
 
 # NOTE: This function takes an interception route to be able to use both a dubins intercepter and an euclidian intercepter.
+# TODO: Make this alot more efficient
 def compute_CPM_HTOP_scores(problem_instance: CPM_HTOP_Instance, routes: List[Route], cpm_route: InterceptionRoute) -> List[float]:
     """Computes the scores of each UAV and the CPM of a given solution to a CPM-HTOP problem instance."""
 
@@ -42,12 +44,13 @@ def compute_CPM_HTOP_scores(problem_instance: CPM_HTOP_Instance, routes: List[Ro
     for i, k in enumerate(cpm_route.route_indicies):
         time_of_ith_interception = cpm_route.time_until_interception(i)
 
-        j = max(idx for idx, visit_time in enumerate(routes[k].visit_times) if visit_time > time_of_ith_interception)
+        j = max(idx for idx, visit_time in enumerate(routes[k].visit_times) if visit_time < time_of_ith_interception)
         if j == len(routes[k].nodes) - 1:
             continue
 
-        new_nodes_which_has_been_visited_by_uav = set(route.nodes[:j]).difference(nodes_whose_scores_have_already_been_extracted_by_cpm)
+        new_nodes_which_has_been_visited_by_uav = set(routes[k].nodes[:j + 1]).difference(nodes_whose_scores_have_already_been_extracted_by_cpm)
         expected_score_of_cpm += sigma(k, i) * sum(node.score for node in new_nodes_which_has_been_visited_by_uav)
+        nodes_whose_scores_have_already_been_extracted_by_cpm = nodes_whose_scores_have_already_been_extracted_by_cpm.union(new_nodes_which_has_been_visited_by_uav)
 
     # Compute expected remaining scores of UAVs
     expected_scores_of_uavs = []
@@ -231,15 +234,19 @@ class CPM_HTOP_Instance:
         if show:
             plt.show()
 
-    def plot_CPM_HTOP_solution(self, routes: List[Route], cpm_route: InterceptionRoute, show: bool = True):
+    def plot_CPM_HTOP_solution(self, routes: List[Route], cpm_route: InterceptionRoute, cpm_route_color: str = "tab:purple", show: bool = True):
         """Plots a CPM-HTOP solution, ie. a set of UAV routes and a CPM route"""
         self.plot_with_routes(routes, plot_points=True, show=False)
-
-        cpm_route.plot()
+        cpm_route.plot(show=False)
 
         scores = compute_CPM_HTOP_scores(self, routes, cpm_route)
+
+        
+        indicators = [mlines.Line2D([], [], color=color, label=f"UAV {idx}: {round(score, 2)}", marker="o") for idx, (score, color) in enumerate(zip(scores[:-1], self._colors))]
+        indicators.append(mlines.Line2D([], [], color=cpm_route_color, label=f"CPM: {round(scores[-1], 2)}", marker="D"))
+        plt.legend(handles=indicators, loc=1)
+
         if show:
-            plt.legend([f"UAV {idx}: {score}" for idx, score in enumerate(scores[:-1])] + [f"CPM: {scores[-1]}"])
             plt.show()
 
     def compute_risk_of_route(self, route: Route) -> float:
