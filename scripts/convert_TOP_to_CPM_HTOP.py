@@ -67,13 +67,14 @@ for idx, file_id in tqdm(enumerate(list(os.listdir(path_to_TOP_instances)))):
             heat_map[i, j] = f([x, y])
 
     t_max = float(info[-1].split(" ")[-1])
-    slow, fast = {"V_cpm": 1.4, "kappa": 1}, {"V_cpm": 1.8, "kappa": 1.3}
-    short, long = {"dmax": round(1.2 * t_max, 4)}, {"dmax": round(1.4 * t_max, 4)}
+    short_distance, medium_distance, long_distance = round(1.2 * t_max, 4), round(1.4 * t_max, 4), round(1.6 * t_max, 4)
+    slow, medium, fast = (1.2, 0.8), (1.4, 1), (1.6, 1.2)
 
-    for idx, (speed, distance) in enumerate([(slow, short), (fast, short), (slow, long), (fast, long)]):
-        cpm_info = f"\nVmax {speed["Vmax"]}\nVmin {speed["Vmin"]}\nkappa {speed["kappa"]}\ndmax {distance["dmax"]}\n"
+    for idx, (speed, minimum_turning_radius) in enumerate([slow, medium, fast]):
+        for jdx, distance in enumerate([short_distance, medium_distance, long_distance]):
+            cpm_info = f"\nVcpm {speed}\nR {minimum_turning_radius}\ndmax {distance}\n"
 
-        new_file_id = ".".join(file_id.split(".")[:-1]) + f".{idx}.txt"
-        with open(os.path.join(path_to_CPM_HTOP_instances, new_file_id), "w+") as new_file:
-            new_info = "\n".join(info) + cpm_info 
-            new_file.write(new_info + points_and_risks)
+            new_file_id = ".".join(file_id.split(".")[:-1]) + f".{idx * 3 + jdx}.txt"
+            with open(os.path.join(path_to_CPM_HTOP_instances, new_file_id), "w+") as new_file:
+                new_info = "\n".join(info) + cpm_info 
+                new_file.write(new_info + points_and_risks)
