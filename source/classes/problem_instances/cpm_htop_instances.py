@@ -18,8 +18,8 @@ plt.rcParams['figure.figsize'] = [9, 9]
 #plt.rcParams['figure.dpi'] = 300
 
 # NOTE: This function takes an interception route to be able to use both a dubins intercepter and an euclidian intercepter.
-def compute_CPM_HTOP_score(problem_instance: CPM_HTOP_Instance, routes: List[Route], cpm_route: InterceptionRoute) -> float:
-    """Computes the score of a given solution to a CPM-HTOP problem instance."""
+def compute_CPM_HTOP_scores(problem_instance: CPM_HTOP_Instance, routes: List[Route], cpm_route: InterceptionRoute) -> List[float]:
+    """Computes the scores of each UAV and the CPM of a given solution to a CPM-HTOP problem instance."""
 
     def sigma(k: int, i: int) -> float:
         """Computes the probability of UAV k remaining operational until the CPM has reached interception point i"""
@@ -57,7 +57,11 @@ def compute_CPM_HTOP_score(problem_instance: CPM_HTOP_Instance, routes: List[Rou
         total_remaining_score = sum(node.score for node in set(route.nodes).difference(nodes_whose_scores_have_already_been_extracted_by_cpm))
         expected_scores_of_uavs.append(sigma(k, len(cpm_route.route_indicies)) * total_remaining_score)
 
-    return sum(expected_scores_of_uavs) + expected_score_of_cpm
+    return expected_scores_of_uavs + [expected_score_of_cpm]
+
+def compute_CPM_HTOP_scores(problem_instance: CPM_HTOP_Instance, routes: List[Route], cpm_route: InterceptionRoute) -> float:
+    """Computes the scores of each UAV and the CPM of a given solution to a CPM-HTOP problem instance."""
+    return sum(compute_CPM_HTOP_scores(problem_instance, routes, cpm_route))
 
 @dataclass
 class CPM_HTOP_Instance:
