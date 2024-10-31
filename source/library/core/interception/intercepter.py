@@ -28,4 +28,4 @@ class InterceptionRoute:
 
     def time_until_interception(self, i: int) -> float:
         """Computes the time until the interception the i'th interception."""
-        return self._distance_travelled_until_interception(i) / self.velocity + self.waiting_time
+        return self._distance_travelled_until_interception(i) / self.velocity + self.delay

@@ -10,15 +10,16 @@ from matplotlib import pyplot as plt
 from matplotlib import animation
 import numpy as np
 
-def animate(cpm_htop_instance: CPM_HTOP_Instance, routes: List[Route], interception_route: InterceptionRoute, number_of_frames: int = 600):
+def animate(cpm_htop_instance: CPM_HTOP_Instance, routes: List[Route], cpm_route: InterceptionRoute, number_of_frames: int = 600):
     """Creates an animation based on the CPM-HTOP instance, a set of routes and an euclidian interception route."""
     fig, _ = plt.subplots()
     t = np.linspace(0, cpm_htop_instance.t_max, number_of_frames)
 
-    cpm_htop_instance.plot_with_routes(routes, plot_points=True, show=False)
-    interception_route.plot(show=False)
+    cpm_htop_instance.plot_CPM_HTOP_solution(routes, cpm_route, show=False)
+    #cpm_htop_instance.plot_with_routes(routes, plot_points=True, show=False)
+    #cpm_route.plot(show=False)
 
-    cpm_scat = plt.scatter(*euclidian_interception_route.get_position(0), c="tab:purple",  s=80, zorder=5) 
+    cpm_scat = plt.scatter(*cpm_route.get_position(0), c="tab:purple",  s=80, zorder=5) 
     uav_positions = [route.get_position(0) for route in routes]
     xs = [pos[0] for pos in uav_positions]
     ys = [pos[1] for pos in uav_positions]
@@ -26,7 +27,7 @@ def animate(cpm_htop_instance: CPM_HTOP_Instance, routes: List[Route], intercept
 
     def update(frame):
         """Updates the figure"""
-        x, y = interception_route.get_position(t[frame])
+        x, y = cpm_route.get_position(t[frame])
         cpm_scat.set_offsets(np.stack([[x], [y]]).T)
 
         uav_positions = [route.get_position(t[frame]) for route in routes]
@@ -47,5 +48,5 @@ if __name__ == "__main__":
     cpm_htop_instance = CPM_HTOP_Instance.load_from_file(f"{problem_id}.txt", needs_plotting=True)
     print(f"Running GRASP on {problem_id}")
     routes = grasp(cpm_htop_instance, p = 0.7, time_budget = 10, use_centroids = True)
-    euclidian_interception_route = EuclidianInterceptionRoute(cpm_htop_instance.source.pos, [0, 2, 3, 1], routes, cpm_htop_instance.cpm_speed, cpm_htop_instance.sink.pos, delay=1)
-    animate(cpm_htop_instance, routes, euclidian_interception_route)
+    euclidian_cpm_route = EuclidianInterceptionRoute(cpm_htop_instance.source.pos, [0, 2, 3, 1], routes, cpm_htop_instance.cpm_speed, cpm_htop_instance.sink.pos, delay=1)
+    animate(cpm_htop_instance, routes, euclidian_cpm_route)
