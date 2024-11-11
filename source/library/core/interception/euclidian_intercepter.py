@@ -2,14 +2,14 @@
 from classes.route import Route
 from classes.data_types import Position
 from scipy.optimize import bisect
-from typing import List
+from typing import List, Optional
 import numpy as np 
 from classes.node import Node
 from matplotlib import pyplot as plt
 from library.core.interception.intercepter import InterceptionRoute
 
 # NOTE: This version computes the interception points using newton-raphson.
-def compute_euclid_interception(pos: Position, vel: float, route: Route, default_position: Position, lock_on_time: float = 0, eps: float = 0.001, plot: bool = False) -> Position | None:
+def compute_euclid_interception(pos: Position, vel: float, route: Route, default_position: Position, lock_on_time: float = 0, eps: float = 0.001, plot: bool = False) -> Optional[Position]:
     """Computes the position of the closest euclidian intercept on the route."""
     if vel < 1:
         raise ValueError("Expected the pursuers velocity to be greater than 1, which is the velocity of the targets.")
@@ -53,28 +53,29 @@ def compute_euclid_interception(pos: Position, vel: float, route: Route, default
             return point
     
     print("Warning: Did not find an interception point!")
-    return default_position
+    return None
 
 
 class EuclidianInterceptionRoute(InterceptionRoute):
     """Models a route of an euclidian intercepter, that is an intercepter moving in a straight line to intercept the targets."""
-
-    def __init__(self, initial_position: Position, route_indicies: List[int], routes: List[Route], vel: float, terminal_position: Position, delay: float = 0):
+                 
+    def __init__(self, route_indicies: List[int], routes: List[Route], velocity: float, delay: float, initial_position: Position, terminal_position: Position):
         """Initializes the euclidian interception route, and computes its path using the compute_euclid_interception function."""
         self.route_indicies = route_indicies
         self.delay = delay 
-        self.velocity = vel
+        self.velocity = velocity
         self.initial_position = initial_position
         self.terminal_position = terminal_position
 
         # Compute first interception point
-        self.interception_points = [compute_euclid_interception(initial_position, vel, routes[route_indicies[0]], self.terminal_position, lock_on_time=delay)]
-        time = delay + np.linalg.norm(self.interception_points[-1] - self.initial_position) / vel
+        self.interception_points = [compute_euclid_interception(initial_position, velocity, routes[route_indicies[0]], self.terminal_position, lock_on_time=delay)]
+        time = delay + np.linalg.norm(self.interception_points[-1] - self.initial_position) / velocity
 
         for k in route_indicies[1:]:
             # Compute the interception point of each k, moving from the latest interception point.
-            self.interception_points.append(compute_euclid_interception(self.interception_points[-1], vel, routes[k], self.terminal_position, lock_on_time=time))
-            time += np.linalg.norm(self.interception_points[-1] - self.interception_points[-2]) / vel
+            self.interception_points.append(compute_euclid_interception(self.interception_points[-1], velocity, routes[k], self.terminal_position, lock_on_time=time))
+            time += np.linalg.norm(self.interception_points[-1] - self.interception_points[-2]) / velocity
+
 
     def plot(self, c: str = "tab:purple", show: bool = True, zorder: int = 5):
         """Plots the euclidian interception route using matplotlib"""
@@ -126,7 +127,6 @@ class EuclidianInterceptionRoute(InterceptionRoute):
         total = np.linalg.norm(self.initial_position - self.interception_points[0]) 
         total += sum(np.linalg.norm(self.interception_points[j - 1] - self.interception_points[j]) for j in range(1, i + 1))
         return total
-
 
 if __name__ == "__main__":
     v0 = Node(0, [], np.array((0, 2)), 0, 0, 0)

@@ -13,6 +13,7 @@ from classes.node import Node
 from classes.route import Route
 from library.core.dijskstra import dijkstra
 from library.core.interception.euclidian_intercepter import EuclidianInterceptionRoute
+from library.core.interception.intercepter import InterceptionRoute
 from sklearn.cluster import KMeans
 
 def risk_aware_sdr(problem: CPM_HTOP_Instance, tail: Node, node: Node) -> float:
@@ -228,6 +229,17 @@ def grasp(problem: CPM_HTOP_Instance, time_budget: int, p: float, use_centroids:
     best_candidate_solution = max(candidate_solutions, key = lambda candidate_solution: sum([route.score for route in candidate_solution]))
     return best_candidate_solution
 
+def greedy_cpm(problem_instance: CPM_HTOP_Instance, routes: List[Route], intercepter: InterceptionRoute) -> InterceptionRoute:
+    """Greedily choses the route indicies (based on the heuristic score * risk of becomming non-operational after intercept / distance to intercept.) and produces an interception route, from this."""
+    route_indicies = []
+
+    candidate_route_indicies = list(range(len(routes)))
+    while len(candidate_route_indicies) != 0:
+        pass 
+
+    return intercepter(route_indicies, routes)
+
+
 if __name__ == "__main__":
     folder_with_top_instances = os.path.join(os.getcwd(), "resources", "CPM_HTOP") 
     cpm_htop_instance = CPM_HTOP_Instance.load_from_file("p4.3.f.0.txt", needs_plotting=True)
@@ -238,4 +250,4 @@ if __name__ == "__main__":
     cpm_htop_instance.plot_with_routes(routes, plot_points=True, show=False)
     euclidian_interception_route.plot()
 
-# %%
+

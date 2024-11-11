@@ -91,13 +91,13 @@ class CPM_HTOP_Instance:
             N =  int(lines[0].split(" ")[-1])
             number_of_agents = int(lines[1].split(" ")[-1])
             t_max = float(lines[2].split(" ")[-1])
-            cpm_speed = (float(lines[3].split(" ")[-1]), float(lines[4].split(" ")[-1]))[1] # TODO: Update to have the CPM have a specific speed 
-            kappa = float(lines[5].split(" ")[-1])
-            d_cpm = float(lines[6].split(" ")[-1])
+            cpm_speed = float(lines[3].split(" ")[-1]) # TODO: Update to have the CPM have a specific speed 
+            kappa = float(lines[4].split(" ")[-1])
+            d_cpm = float(lines[5].split(" ")[-1])
 
             nodes = []
             risk_matrix = np.zeros(shape=(N, N))
-            for node_id, (x_pos, y_pos, score, *risks) in enumerate(map(lambda line: tuple(map(float, line.split(" "))), lines[7:])):
+            for node_id, (x_pos, y_pos, score, *risks) in enumerate(map(lambda line: tuple(map(float, line.split(" "))), lines[6:])):
                 risk_matrix[node_id] = risks
                 pos = np.array([x_pos, y_pos])
                 nodes.append(Node(node_id, [], pos, score))
@@ -264,4 +264,5 @@ if __name__ == "__main__":
 
     first_cpm_htop_instance = CPM_HTOP_Instance.load_from_file("p4.2.a.0.txt", needs_plotting=True)
     #first_cpm_htop_instance = load_CPM_HTOP_instances(needs_plotting = True, neighbourhood_level = 1)[0]
-    first_cpm_htop_instance.plot()
+    first_cpm_htop_instance.plot(show=False)
+    plt.savefig("test.png", bbox_inches="tight")

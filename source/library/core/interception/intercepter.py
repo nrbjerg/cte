@@ -1,5 +1,6 @@
 from typing import List 
 from classes.data_types import Position
+from classes.route import Route
 
 class InterceptionRoute:
     """Models a general route of an intercepter, which is then inherited from."""
@@ -12,9 +13,14 @@ class InterceptionRoute:
 
     # Contains a list of interception positions
     interception_points: List[Position]
+    interception_times: List[float]
     route_indicies: List[int] # The indicies of the routes which are intercepted.
 
-    def plot(self, c: str = "tab:red", show: bool = True):
+    def __init__(self, route_indicies: List[int], routes: List[Route], velocity: float, delay: float, initial_position: Position, terminal_position: Position):
+        """Initializes the intercepter and performs initial computation of interception points and times."""
+        pass # NOTE: should be implemented in the children
+
+    def plot(self, c: str = "tab:purple", show: bool = True):
         """Plots the interception route."""
         pass # NOTE: should be implemented in the children
 
@@ -29,3 +35,14 @@ class InterceptionRoute:
     def time_until_interception(self, i: int) -> float:
         """Computes the time until the interception the i'th interception."""
         return self._distance_travelled_until_interception(i) / self.velocity + self.delay
+
+    def can_route_be_intercepted(self, route: Route, route_index: int) -> bool:
+        """Checks if the given route can be intercepted after the final interception point."""
+        pass # NOTE: should be implemented in the children
+        
+        if route_index == self.route_indicies[-1]:
+            return False
+        
+
+
+    
