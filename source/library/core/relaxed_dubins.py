@@ -118,6 +118,7 @@ def compute_relaxed_dubins_path(q: State, p: Position, rho: float, plot: bool = 
        of the relaxed dubins path between q and the position p, if need_path == False"""
     # 1. Transform the cordiante system so that q.pos is the origin and so that q.angle == pi / 2
     rotation_angle = np.pi / 2 - q.angle
+    print(np.rad2deg(rotation_angle))
     rotation_matrix = np.array([[np.cos(rotation_angle), -np.sin(rotation_angle)], [np.sin(rotation_angle), np.cos(rotation_angle)]])
     p_prime = np.dot(rotation_matrix, (p - q.pos))
 
@@ -132,15 +133,15 @@ def compute_relaxed_dubins_path(q: State, p: Position, rho: float, plot: bool = 
             plt.scatter(*center, c = color)
             plt.gca().add_patch(plt.Circle(center, rho, color = color, fill = False))
 
-    if p[0] >= 0: # Candidates are LS and RL
+    if p_prime[0] >= 0: # Candidates are LS and RL
         distance_from_c_r = np.linalg.norm(p_prime - c_r)
         if distance_from_c_r < rho or (distance_from_c_r == rho and p_prime[0] < 0):
-            intersection_points = [point for point in get_intersection_points(c_l, 2 * rho, p, rho) if point[1] >= 0]
+            intersection_points = [point for point in get_intersection_points(c_l, 2 * rho, p_prime, rho) if point[1] >= 0]
             second_arc_center = intersection_points[0]
             u = np.arctan(second_arc_center[1] / (rho + second_arc_center[0]))
 
             # v is the angle between the vector form the new c_l to c_r and the vector form c_l to p
-            v = 2 * np.pi - np.arccos(np.dot(second_arc_center - c_l, second_arc_center - p) / (2 * rho ** 2))
+            v = 2 * np.pi - np.arccos(np.dot(second_arc_center - c_l, second_arc_center - p_prime) / (2 * rho ** 2))
             length = rho * (u + v)
             if not need_path:
                 return length
@@ -152,32 +153,32 @@ def compute_relaxed_dubins_path(q: State, p: Position, rho: float, plot: bool = 
             return path
         else:
             #if p[1] >= 0:
-            hyp = np.linalg.norm(c_r - p)
+            hyp = np.linalg.norm(c_r - p_prime)
             a = np.arccos(rho / hyp)
-            if p[1] >= 0:
-                b = np.arccos(np.dot(p - c_r, q.pos - c_r) / (rho * hyp)) - a
+            if p_prime[1] >= 0:
+                b = np.arccos(np.dot(p_prime - c_r, q.pos - c_r) / (rho * hyp)) - a
             else:
-                b = 2 * np.pi - np.arccos(np.dot(p - c_r, q.pos - c_r) / (rho * hyp)) - a 
+                b = 2 * np.pi - np.arccos(np.dot(p_prime - c_r, q.pos - c_r) / (rho * hyp)) - a 
             
             length = np.sqrt(hyp ** 2 - rho ** 2) + b * rho 
 
             if not need_path:
                 return length
             
-            path = CSPath(Direction.RIGHT, p, b, rho, length)
+            path = CSPath(Direction.RIGHT, p_prime, b, rho, length)
             path.plot()
             return path
 
     else: 
         distance_from_c_l = np.linalg.norm(p_prime - c_l)
         if distance_from_c_l < rho or (distance_from_c_l == rho and p_prime[0] < 0):
-            intersection_points = [point for point in get_intersection_points(c_r, 2 * rho, p, rho) if point[1] >= 0]
+            intersection_points = [point for point in get_intersection_points(c_r, 2 * rho, p_prime, rho) if point[1] >= 0]
             second_arc_center = intersection_points[0]
             plt.plot(*second_arc_center, c="red", zorder=4)
             u = np.abs(np.arctan(second_arc_center[1] / (second_arc_center[0] - rho)))
 
             # v is the angle between the vector form the center of the second arc and to c_r and the vector form the center of the second arc to p
-            v = 2 * np.pi - np.arccos(np.dot(second_arc_center - c_r, second_arc_center - p) / (2 * rho ** 2))
+            v = 2 * np.pi - np.arccos(np.dot(second_arc_center - c_r, second_arc_center - p_prime) / (2 * rho ** 2))
             length = rho * (u + v)
             if not need_path:
                 return length
@@ -188,19 +189,19 @@ def compute_relaxed_dubins_path(q: State, p: Position, rho: float, plot: bool = 
                 
             return path
         else:
-            hyp = np.linalg.norm(c_l - p)
+            hyp = np.linalg.norm(c_l - p_prime)
             a = np.arccos(rho / hyp)
-            if p[1] >= 0:
-                b = np.arccos(np.dot(p - c_l, q.pos - c_l) / (rho * hyp)) - a
+            if p_prime[1] >= 0:
+                b = np.arccos(np.dot(p_prime - c_l, q.pos - c_l) / (rho * hyp)) - a
             else:
-                b = 2 * np.pi - np.arccos(np.dot(p - c_l, q.pos - c_l) / (rho * hyp)) - a 
+                b = 2 * np.pi - np.arccos(np.dot(p_prime - c_l, q.pos - c_l) / (rho * hyp)) - a 
 
             length = np.sqrt(hyp ** 2 - rho ** 2) + b * rho 
 
             if not need_path:
                 return length
             
-            path = CSPath(Direction.LEFT, p, b, rho, length)
+            path = CSPath(Direction.LEFT, p_prime, b, rho, length)
             path.plot()
             return path
 
@@ -209,9 +210,9 @@ def can_be_reached(q: State, p: Position, rho: float, remaining_travel_budget: f
     return compute_relaxed_dubins_path(q, p, rho, need_path=False) < remaining_travel_budget 
 
 if __name__ == "__main__":
-    angle = np.pi / 2
+    angle = -np.pi / 3
     q = State(np.array([0, 0]), angle)
-    p = np.array([0.5, 0.5])
+    p = np.array([0.5, 0.2])
     print(compute_relaxed_dubins_path(q, p, 1, plot = True, need_path = True))
     #print(f"Euclidian distance: {np.linalg.norm(q.pos - p)}")
     
