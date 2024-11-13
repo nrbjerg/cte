@@ -118,9 +118,9 @@ def compute_relaxed_dubins_path(q: State, p: Position, rho: float, plot: bool = 
        of the relaxed dubins path between q and the position p, if need_path == False"""
     # 1. Transform the cordiante system so that q.pos is the origin and so that q.angle == pi / 2
     rotation_angle = np.pi / 2 - q.angle
-    print(np.rad2deg(rotation_angle))
     rotation_matrix = np.array([[np.cos(rotation_angle), -np.sin(rotation_angle)], [np.sin(rotation_angle), np.cos(rotation_angle)]])
-    p_prime = np.dot(rotation_matrix, (p - q.pos))
+    p_prime = rotation_matrix.dot(p - q.pos) 
+    # NOTE: Remember that this means that the q is located at 0, 0 with an initial heading of pi / 2
 
     c_l, c_r = np.array([-rho, 0]), np.array([rho, 0])
     if plot:
@@ -147,18 +147,15 @@ def compute_relaxed_dubins_path(q: State, p: Position, rho: float, plot: bool = 
                 return length
             
             path = CCPath((Direction.LEFT, Direction.RIGHT), (u, v), rho, rho * (u + v))
-            if plot:
-                path.plot()
-                
-            return path
+
         else:
             #if p[1] >= 0:
             hyp = np.linalg.norm(c_r - p_prime)
             a = np.arccos(rho / hyp)
             if p_prime[1] >= 0:
-                b = np.arccos(np.dot(p_prime - c_r, q.pos - c_r) / (rho * hyp)) - a
+                b = np.arccos(np.dot(p_prime - c_r, - c_r) / (rho * hyp)) - a
             else:
-                b = 2 * np.pi - np.arccos(np.dot(p_prime - c_r, q.pos - c_r) / (rho * hyp)) - a 
+                b = 2 * np.pi - np.arccos(np.dot(p_prime - c_r, - c_r) / (rho * hyp)) - a 
             
             length = np.sqrt(hyp ** 2 - rho ** 2) + b * rho 
 
@@ -166,8 +163,6 @@ def compute_relaxed_dubins_path(q: State, p: Position, rho: float, plot: bool = 
                 return length
             
             path = CSPath(Direction.RIGHT, p_prime, b, rho, length)
-            path.plot()
-            return path
 
     else: 
         distance_from_c_l = np.linalg.norm(p_prime - c_l)
@@ -184,17 +179,14 @@ def compute_relaxed_dubins_path(q: State, p: Position, rho: float, plot: bool = 
                 return length
             
             path = CCPath((Direction.RIGHT, Direction.LEFT), (u, v), rho, rho * (u + v))
-            if plot:
-                path.plot()
-                
-            return path
+
         else:
             hyp = np.linalg.norm(c_l - p_prime)
             a = np.arccos(rho / hyp)
             if p_prime[1] >= 0:
-                b = np.arccos(np.dot(p_prime - c_l, q.pos - c_l) / (rho * hyp)) - a
+                b = np.arccos(np.dot(p_prime - c_l, - c_l) / (rho * hyp)) - a
             else:
-                b = 2 * np.pi - np.arccos(np.dot(p_prime - c_l, q.pos - c_l) / (rho * hyp)) - a 
+                b = 2 * np.pi - np.arccos(np.dot(p_prime - c_l, - c_l) / (rho * hyp)) - a 
 
             length = np.sqrt(hyp ** 2 - rho ** 2) + b * rho 
 
@@ -202,17 +194,19 @@ def compute_relaxed_dubins_path(q: State, p: Position, rho: float, plot: bool = 
                 return length
             
             path = CSPath(Direction.LEFT, p_prime, b, rho, length)
-            path.plot()
-            return path
+
+    if plot:
+        path.plot()
+        
+    return path
 
 def can_be_reached(q: State, p: Position, rho: float, remaining_travel_budget: float) -> bool:
     """Simply checks if the position p can be reached using a relaxed dubins path from the state q."""
     return compute_relaxed_dubins_path(q, p, rho, need_path=False) < remaining_travel_budget 
 
 if __name__ == "__main__":
-    angle = -np.pi / 3
-    q = State(np.array([0, 0]), angle)
-    p = np.array([0.5, 0.2])
+    angle = -np.pi / 2 
+    q = State(np.array([1, 0]), angle)
+    p = np.array([2, 0.8])
     print(compute_relaxed_dubins_path(q, p, 1, plot = True, need_path = True))
     #print(f"Euclidian distance: {np.linalg.norm(q.pos - p)}")
-    
