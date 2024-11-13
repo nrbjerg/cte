@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Tuple
 from matplotlib import pyplot as plt 
 from matplotlib import patches
+import random
 
 Position = ArrayLike
 Velocity = ArrayLike
@@ -20,6 +21,9 @@ class State:
     def to_tuple(self) -> Tuple[float, float, float]:
         """Converts the state to a tuple."""
         return (self.pos[0], self.pos[1], self.angle)
+
+    def __repr__ (self) -> str:
+        return f"{(round(float(self.pos[0]), 2), round(float(self.pos[1]), 2), round(self.angle, 2))}"
 
 class AngleInterval:
 
@@ -56,19 +60,17 @@ class AngleInterval:
         cone = patches.Polygon(points, closed=True, color = color, alpha = alpha)
         plt.gca().add_patch(cone)
 
-        #plt.plot([ancour[0], ancour[0] + r * np.cos(self.theta)], [ancour[1], ancour[1] + r * np.sin(self.theta)])
+    def generate_random_uniform_angle(self) -> Angle:
+        """Generates a random angle from the angle interval, uniformly."""
+        if self.a < self.b:
+            return np.random.uniform(self.a, self.b)
+        
+        # Either generate an angle above or below the x axis depending on the proporition of the 
+        # propotion of the arc described by the angle interval being above / below the x axis.
+        elif random.choices([0, 1], weights = [2 * np.pi - self.a, self.b], k = 1)[0] == 1:
+            return np.random.uniform(self.a, 2 * np.pi)
+        else:
+            return np.random.unifomr(0, self.b)
 
     def __repr__ (self) -> str:
         return f"[{round(self.a, 3)}; {round(self.b, 3)}]"
-
-if __name__ == "__main__":
-    intervals = [AngleInterval(5, 1), AngleInterval(0, 1), AngleInterval(2, 4)]
-    print(intervals[0].intersects(intervals[1]))
-    print(intervals[1].intersects(intervals[0]))
-    print(intervals[2].intersects(intervals[0]))
-    for interval in intervals:
-        interval.plot(np.array((0, 0)), 1, "tab:gray", 0.4)
-    
-    plt.xlim(-1, 1)
-    plt.ylim(-1, 1)
-    plt.show()
