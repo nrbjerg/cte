@@ -7,7 +7,7 @@ from typing import Union, Tuple
 from enum import IntEnum
 from dataclasses import dataclass
 import matplotlib
-import math
+from utils.geometry import get_intersection_points_between_circles
 
 class Direction(IntEnum):
     """Models a direction of a turn"""
@@ -23,9 +23,10 @@ class CSPath:
     rho: float
     length: float
 
-    def plot(self, color: str = "tab:orange"): 
-        """Plots the path using matplotlib."""
+    def plot(self, q: State, color: str = "tab:orange"): 
+        """Plots the path using matplotlib, using q for the inital state of the dubins vehicle."""
         # 1. Plot the arc
+        rotation_angle = np.pi / 2 - q.angle
         if self.direction == Direction.RIGHT:
             center = (self.rho, 0)
             start, end = np.rad2deg(np.pi - self.radians_traversed_on_arc), np.rad2deg(np.pi)
@@ -59,8 +60,8 @@ class CCPath:
     rho: float
     length: float
 
-    def plot(self, color: str = "tab:orange"):
-        """Plots the path using matplotlib."""
+    def plot(self, q: State, color: str = "tab:orange"):
+        """Plots the path using matplotlib, using q for the inital state of the dubins vehicle."""
         # Plot the first arc.
         (u, v) = self.radians_traversed_on_arcs
         if self.directions[0] == Direction.RIGHT:
@@ -91,28 +92,6 @@ class CCPath:
         path_type = "RL" if self.directions == (Direction.RIGHT, Direction.LEFT) else "LR"
         return f"{path_type}(radians: {self.radians_traversed_on_arcs[0]:.2f} and {self.radians_traversed_on_arcs[1]:.2f}, length: {self.length:.2f})"
 
-def get_intersection_points(c1: Position, r1: float, c2: Position, r2: float) -> Tuple[Position, Position]:
-    """Computes the intersection points of two circles with centers at c1 and c2 and radiis of r1 and r2 respectively."""
-    d = np.linalg.norm(c1 - c2)
-    print(d)
-    if d > r1 + r2 or d < np.abs(r1 - r2) or d == 0:
-        raise ValueError(f"The circles are either non-intersecting or a fully intersecting, {(c1, r1)}, {(c2, r2)}")
-
-    # Shamelessly grabed from https://stackoverflow.com/questions/55816902/finding-the-intersection-of-two-circles 
-    a = (r1 ** 2 - r2 ** 2 + d ** 2) / (2 * d)
-    h=np.sqrt(r1 ** 2 - a ** 2)
-    
-    x0 = c1[0] + a * (c2[0] - c1[0]) / d 
-    y0 = c1[1] + a * (c2[1] - c1[1]) / d
-
-    x1 = x0 + h * (c2[1] - c1[1]) / d
-    y1 = y0 - h * (c2[0] - c1[0]) / d
-
-    x2 = x0 - h * (c2[1] - c1[1]) / d
-    y2 = y0 + h * (c2[0] - c1[0]) / d
-        
-    return (np.array([x1, y1]), np.array([x2, y2])) 
-
 def compute_relaxed_dubins_path(q: State, p: Position, rho: float, plot: bool = False, need_path: bool = False) -> Union[CSPath, CCPath, float]:
     """Either computes the relaxed dubins path between the configuration q and the position p, or the length 
        of the relaxed dubins path between q and the position p, if need_path == False"""
@@ -136,7 +115,7 @@ def compute_relaxed_dubins_path(q: State, p: Position, rho: float, plot: bool = 
     if p_prime[0] >= 0: # Candidates are LS and RL
         distance_from_c_r = np.linalg.norm(p_prime - c_r)
         if distance_from_c_r < rho or (distance_from_c_r == rho and p_prime[0] < 0):
-            intersection_points = [point for point in get_intersection_points(c_l, 2 * rho, p_prime, rho) if point[1] >= 0]
+            intersection_points = [point for point in get_intersection_points_between_circles(c_l, 2 * rho, p_prime, rho) if point[1] >= 0]
             second_arc_center = intersection_points[0]
             u = np.arctan(second_arc_center[1] / (rho + second_arc_center[0]))
 
@@ -167,7 +146,7 @@ def compute_relaxed_dubins_path(q: State, p: Position, rho: float, plot: bool = 
     else: 
         distance_from_c_l = np.linalg.norm(p_prime - c_l)
         if distance_from_c_l < rho or (distance_from_c_l == rho and p_prime[0] < 0):
-            intersection_points = [point for point in get_intersection_points(c_r, 2 * rho, p_prime, rho) if point[1] >= 0]
+            intersection_points = [point for point in get_intersection_points_between_circles(c_r, 2 * rho, p_prime, rho) if point[1] >= 0]
             second_arc_center = intersection_points[0]
             plt.plot(*second_arc_center, c="red", zorder=4)
             u = np.abs(np.arctan(second_arc_center[1] / (second_arc_center[0] - rho)))
@@ -196,7 +175,7 @@ def compute_relaxed_dubins_path(q: State, p: Position, rho: float, plot: bool = 
             path = CSPath(Direction.LEFT, p_prime, b, rho, length)
 
     if plot:
-        path.plot()
+        path.plot(q)
         
     return path
 
