@@ -26,7 +26,7 @@ class CSPath:
     def plot(self, q: State, color: str = "tab:orange"): 
         """Plots the path using matplotlib, using q for the inital state of the dubins vehicle."""
         # 1. Plot the arc
-        rotation_angle = np.pi / 2 - q.angle
+        #rotation_angle = np.pi / 2 - q.angle
         if self.direction == Direction.RIGHT:
             center = (self.rho, 0)
             start, end = np.rad2deg(np.pi - self.radians_traversed_on_arc), np.rad2deg(np.pi)
@@ -184,8 +184,8 @@ def can_be_reached(q: State, p: Position, rho: float, remaining_travel_budget: f
     return compute_relaxed_dubins_path(q, p, rho, need_path=False) < remaining_travel_budget 
 
 if __name__ == "__main__":
-    angle = -np.pi / 2 
-    q = State(np.array([1, 0]), angle)
-    p = np.array([2, 0.8])
+    angle = np.pi / 2 
+    q = State(np.array([0, 0]), angle)
+    p = np.array([1, 2])
     print(compute_relaxed_dubins_path(q, p, 1, plot = True, need_path = True))
     #print(f"Euclidian distance: {np.linalg.norm(q.pos - p)}")
