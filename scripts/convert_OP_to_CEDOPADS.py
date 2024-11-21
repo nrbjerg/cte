@@ -2,7 +2,7 @@
 import numpy as np 
 import os 
 from classes.data_types import AngleInterval
-from classes.problem_instances.cedopads_instance import CEDOPADS
+from classes.problem_instances.cedopads_instances import CEDOPADS
 import random
 
 path_to_instances = os.path.join(os.getcwd(), "resources", "OP")
@@ -35,7 +35,6 @@ for idx, file_id in enumerate(os.listdir(path_to_instances)[:1]):
                     indicies_to_remove.append(j)
 
         for i in reversed(indicies_to_remove):
-            print(i)
             thetas.pop(i)
             phis.pop(i)
             zetas.pop(i)
@@ -49,6 +48,7 @@ for idx, file_id in enumerate(os.listdir(path_to_instances)[:1]):
     print(new_lines)
 
     with open(os.path.join(os.getcwd(), "resources", "CEDOPADS", file_id), "w+") as file:
+
         file.write("\n".join(info_and_depots + new_lines))
         
 problem_instance = CEDOPADS.load_from_file("set_64_1_60.txt", needs_plotting = True)
