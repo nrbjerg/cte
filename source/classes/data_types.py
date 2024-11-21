@@ -22,6 +22,10 @@ class State:
         """Converts the state to a tuple."""
         return (self.pos[0], self.pos[1], self.angle)
 
+    def angle_complement(self) -> State:
+        """Returns the same state, with the angle fliped 180 degrees."""
+        return State(self.pos, (np.pi + self.angle) % (2 * np.pi))
+
     def __repr__ (self) -> str:
         return f"{(round(float(self.pos[0]), 2), round(float(self.pos[1]), 2), round(self.angle, 2))}"
 
@@ -48,10 +52,12 @@ class AngleInterval:
         
     def plot(self, ancour: Position, r: float, color: str, alpha: float):
         """Plots the angle as a circle arc of radius r with a center at the ancour point"""
-        if self.a < self.b:
-            angles = np.linspace(self.a, self.b, 50) 
+        # The angles from the centers 
+        a0, b0 = (self.a + np.pi) % (2 * np.pi), (self.b + np.pi) % (2 * np.pi)
+        if a0 < b0:
+            angles = np.linspace(a0, b0, 50) 
         else:
-            angles = np.linspace(self.a, (2 * np.pi) * (self.a // (2 * np.pi) + 1) + self.b, 50)
+            angles = np.linspace(a0, (2 * np.pi) * (a0 // (2 * np.pi) + 1) + b0, 50)
 
         points_on_arc = np.vstack((ancour[0] + r * np.cos(angles),  
                                    ancour[1] + r * np.sin(angles)))
