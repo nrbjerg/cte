@@ -80,6 +80,7 @@ def mutate(problem_instance: CEDOPADSInstance, route: CEDOPADSRoute, temperature
 
 def compute_offspring(problem_instance: CEDOPADSInstance, parents: Tuple[CEDOPADSRoute, CEDOPADSRoute]) -> CEDOPADSRoute:
     """Computes the offspring of two parents."""
+    
     return parents[0]
 
 def memetic_algorithm(problem_instance: CEDOPADSInstance, n_pop: int, sensing_radius: float, rho: float, t_max: float, time_budget: float = 60, debug: bool = False) -> CEDOPADSRoute:
@@ -87,39 +88,51 @@ def memetic_algorithm(problem_instance: CEDOPADSInstance, n_pop: int, sensing_ra
     start_time = time.time()
     # 1. Initialize population
     population = generate_random_population(problem_instance, n_pop, sensing_radius, rho, t_max, p = 0.6)
+    if debug:
+        plt.ion()
     
     # NOTE: At the moment we have created the route such that every route is a candidate
     goat, score_of_goat = None, 0
 
     while remaining_time := (time.time() - start_time) < time_budget:
         ratio_of_time_remaining = 1 - remaining_time / time_budget
+
         # Compute the fitnesss of each individual
         scores = np.array([problem_instance.compute_score_of_route(route) for route in population])
+
         # NOTE: we could maybe allow the routes to have a higher length than t_max, 
         # but penalize them harder and harder as the time budget depletes this could perhaps help the search
         # i have seen this is some paper, which would need to be cited.
         penalties = np.array([compute_penalty(problem_instance.compute_length_of_route(route, sensing_radius, rho), t_max, remaining_time) for route in population])
-        fitnesses = scores #- penalties
+
+        # Penalize routes which are to long more and more as time goes on.
+        fitnesses = scores - (penalties / (ratio_of_time_remaining ** 2)) 
 
         # Check if we have a new goat.
         candidates_and_scores = [(route, scores[i]) for i, route in enumerate(population) if penalties[i] == 0]
         (candidate, score_of_candidate) = max(candidates_and_scores, key=lambda tup: tup[1])
-        if score_of_candidate < score_of_goat:
+        if score_of_candidate > score_of_goat:
             goat = candidate
+            score_of_goat = score_of_candidate
+            print(f"Found a new GOAT: {goat} with a score of {score_of_goat}")
 
-        # Plot the best routes 
+        # Plot the best routes, which obeys the distance constraint, in a non-blocking way
         if debug: 
-            routes = [route for i, route in enumerate(population) if (i in np.argpartition(scores, -4)[-4:])]
-            problem_instance.plot_with_routes(routes, sensing_radius, rho)
+            scores_of_candidates = [score for _, score in candidates_and_scores]
+            routes = [route for i, (route, _) in enumerate(candidates_and_scores) if (i in np.argpartition(scores_of_candidates, -4)[-4:])]
+            problem_instance.plot_with_routes(routes, sensing_radius, rho, show = False)
+            plt.draw()
+            plt.show()
 
         # Compute next generation and set a new population
-        # TODO: We can probabily get some further improvements by updating this.
-        weights = fitnesses - min(fitnesses) * np.ones(n_pop)
-        temperature = 0.1 # Should probabily change with ratio_of_remaining_time.
+        
+        weights = fitnesses - min(fitnesses) * np.ones(n_pop) # TODO: We can probabily get some further improvements by updating this.
+        probabilities = weights / sum(weights) if sum(weights) != 0 else (1 / n_pop) * np.ones(n_pop)
+        temperature = 0.1 # TODO: Should probabily change with ratio_of_remaining_time.
         new_generation = []
         for _ in range(n_pop):
-            parent_indicies = np.random.choice(n_pop, 2, replace=False)
-            parents = (population[i] for i in parent_indicies)
+            parent_indicies = np.random.choice(n_pop, 2, p = probabilities, replace=False)
+            parents = tuple(population[i] for i in parent_indicies)
             non_mutated_offspring = compute_offspring(problem_instance, parents)
             new_generation.append(mutate(problem_instance, non_mutated_offspring, temperature))
 
@@ -137,5 +150,10 @@ def memetic_algorithm(problem_instance: CEDOPADSInstance, n_pop: int, sensing_ra
 
 if __name__ == "__main__":
     problem_instance = load_CPM_HTOP_instances(needs_plotting = True)[0]
-    route = memetic_algorithm(problem_instance, 100, 1, 1, 40, debug=True)
+    n_pop = 100
+    sensing_radius = 1
+    rho = 1
+    t_max = 40
+    route = memetic_algorithm(problem_instance, n_pop, sensing_radius, rho, t_max, time_budget = 10, debug=True)
+    print(f"GOAT: {route}, with a score of {problem_instance.compute_score_of_route(route)}")
 

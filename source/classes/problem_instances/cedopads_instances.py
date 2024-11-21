@@ -161,7 +161,7 @@ class CEDOPADSInstance:
 
         plt.plot()
     
-    def plot_with_routes(self, routes: List[CEDOPADSRoute], sensing_radius: float, rho: float, colors: List[str] = ["tab:orange", "tab:green", "tab:red", "tab:blue", "tab:purple", "tab:cyan"]):
+    def plot_with_routes(self, routes: List[CEDOPADSRoute], sensing_radius: float, rho: float, colors: List[str] = ["tab:orange", "tab:green", "tab:red", "tab:blue", "tab:purple", "tab:cyan"], show: bool = False):
         """Plots multiple CEDOPADS routes on top of the plot"""
         self.plot(sensing_radius, set())
 
@@ -189,7 +189,8 @@ class CEDOPADSInstance:
 
         indicators = [mlines.Line2D([], [], color=color, label=f"Score: {round(self.compute_score_of_route(route), 2)}", marker="s") for color, route in zip(colors, routes)]
         plt.legend(handles=indicators, loc=1)
-        plt.plot()
+        if show: 
+            plt.plot()
 
     def get_states(self, route: CEDOPADSRoute, sensing_radius: float) -> List[State]:
         """Returns a list of states corresponding to q_1, ..., q_M from the problem formulation."""
