@@ -2,3 +2,4 @@ __pychache__/
 *.py[cod]
 *.egg-info
 temp.py
+site-packages
