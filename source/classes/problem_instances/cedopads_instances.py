@@ -145,7 +145,7 @@ class CEDOPADSInstance:
                 plt.scatter(*q[i].pos, marker="s", c = color, zorder=2)
 
             # 1. Plot route from the source to q_1
-            first_path = compute_relaxed_dubins_path(q[0].angle_complement(), self.source, rho, need_path=True)
+            first_path = compute_relaxed_dubins_path(q[0].angle_complement(), self.source, rho)
             first_path.plot(q[0].angle_complement(), self.source, color = color)
 
             # 2. Plot the dubins trajectories between q_i, q_i + 1
@@ -156,7 +156,7 @@ class CEDOPADSInstance:
                 plt.plot(configurations[:, 0], configurations[:, 1], c = color)
 
             # 3. Plot route from q_M to the sink 
-            final_path = compute_relaxed_dubins_path(q[-1], self.sink, rho, need_path=True)
+            final_path = compute_relaxed_dubins_path(q[-1], self.sink, rho)
             final_path.plot(q[-1], self.sink, color = color)
 
         plt.plot()

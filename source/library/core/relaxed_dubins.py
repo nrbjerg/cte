@@ -105,7 +105,58 @@ class CCPath:
         path_type = "RL" if self.directions == (Direction.RIGHT, Direction.LEFT) else "LR"
         return f"{path_type}(radians: {self.radians_traversed_on_arcs[0]:.2f} and {self.radians_traversed_on_arcs[1]:.2f}, length: {self.length:.2f})"
 
-def compute_relaxed_dubins_path(q: State, p: Position, rho: float, plot: bool = False, verbose_plot: bool = False, need_path: bool = False) -> Union[CSPath, CCPath, float]:
+def compute_length_of_relaxed_dubins_path(q: State, p: Position, rho: float) -> float:
+    """Simply computes the length of the shortest dubins path from q to p, directly."""
+    rotation_angle = np.pi / 2 - q.angle
+    rotation_matrix = np.array([[np.cos(rotation_angle), -np.sin(rotation_angle)], 
+                                [np.sin(rotation_angle), np.cos(rotation_angle)]])
+
+    p_prime = rotation_matrix.dot(p - q.pos) 
+    c_l, c_r = np.array([-rho, 0]), np.array([rho, 0])
+
+    if p_prime[0] >= 0: # Candidates are LS and RL
+        distance_from_c_r = np.linalg.norm(p_prime - c_r)
+        if distance_from_c_r < rho or (distance_from_c_r == rho and p_prime[0] < 0):
+            intersection_points = [point for point in get_intersection_points_between_circles(c_l, 2 * rho, p_prime, rho) if point[1] >= 0]
+            second_arc_center = intersection_points[0]
+            u = np.arctan(second_arc_center[1] / (rho + second_arc_center[0]))
+
+            # v is the angle between the vector form the new c_l to c_r and the vector form c_l to p
+            v = 2 * np.pi - np.arccos(np.dot(second_arc_center - c_l, second_arc_center - p_prime) / (2 * rho ** 2))
+            return rho * (u + v)
+
+        else:
+            hyp = np.linalg.norm(c_r - p_prime)
+            a = np.arccos(rho / hyp)
+            if p_prime[1] >= 0:
+                b = np.arccos(np.dot(p_prime - c_r, - c_r) / (rho * hyp)) - a
+            else:
+                b = 2 * np.pi - np.arccos(np.dot(p_prime - c_r, - c_r) / (rho * hyp)) - a 
+            
+            return np.sqrt(hyp ** 2 - rho ** 2) + b * rho 
+
+    else: 
+        distance_from_c_l = np.linalg.norm(p_prime - c_l)
+        if distance_from_c_l < rho or (distance_from_c_l == rho and p_prime[0] < 0):
+            intersection_points = [point for point in get_intersection_points_between_circles(c_r, 2 * rho, p_prime, rho) if point[1] >= 0]
+            second_arc_center = intersection_points[0]
+            u = np.abs(np.arctan(second_arc_center[1] / (second_arc_center[0] - rho)))
+
+            # v is the angle between the vector form the center of the second arc and to c_r and the vector form the center of the second arc to p
+            v = 2 * np.pi - np.arccos(np.dot(second_arc_center - c_r, second_arc_center - p_prime) / (2 * rho ** 2))
+            return rho * (u + v)
+            
+        else:
+            hyp = np.linalg.norm(c_l - p_prime)
+            a = np.arccos(rho / hyp)
+            if p_prime[1] >= 0:
+                b = np.arccos(np.dot(p_prime - c_l, - c_l) / (rho * hyp)) - a
+            else:
+                b = 2 * np.pi - np.arccos(np.dot(p_prime - c_l, - c_l) / (rho * hyp)) - a 
+
+            return np.sqrt(hyp ** 2 - rho ** 2) + b * rho 
+
+def compute_relaxed_dubins_path(q: State, p: Position, rho: float, plot: bool = False, verbose_plot: bool = False) -> Union[CSPath, CCPath]:
     """Either computes the relaxed dubins path between the configuration q and the position p, or the length 
        of the relaxed dubins path between q and the position p, if need_path == False"""
     # 1. Transform the cordiante system so that q.pos is the origin and so that q.angle == pi / 2
@@ -132,14 +183,9 @@ def compute_relaxed_dubins_path(q: State, p: Position, rho: float, plot: bool = 
 
             # v is the angle between the vector form the new c_l to c_r and the vector form c_l to p
             v = 2 * np.pi - np.arccos(np.dot(second_arc_center - c_l, second_arc_center - p_prime) / (2 * rho ** 2))
-            length = rho * (u + v)
-            if not need_path:
-                return length
-            
             path = CCPath((Direction.LEFT, Direction.RIGHT), (u, v), rho, rho * (u + v))
 
         else:
-            #if p[1] >= 0:
             hyp = np.linalg.norm(c_r - p_prime)
             a = np.arccos(rho / hyp)
             if p_prime[1] >= 0:
@@ -148,10 +194,6 @@ def compute_relaxed_dubins_path(q: State, p: Position, rho: float, plot: bool = 
                 b = 2 * np.pi - np.arccos(np.dot(p_prime - c_r, - c_r) / (rho * hyp)) - a 
             
             length = np.sqrt(hyp ** 2 - rho ** 2) + b * rho 
-
-            if not need_path:
-                return length
-            
             path = CSPath(Direction.RIGHT, b, rho, length)
 
     else: 
@@ -164,10 +206,6 @@ def compute_relaxed_dubins_path(q: State, p: Position, rho: float, plot: bool = 
 
             # v is the angle between the vector form the center of the second arc and to c_r and the vector form the center of the second arc to p
             v = 2 * np.pi - np.arccos(np.dot(second_arc_center - c_r, second_arc_center - p_prime) / (2 * rho ** 2))
-            length = rho * (u + v)
-            if not need_path:
-                return length
-            
             path = CCPath((Direction.RIGHT, Direction.LEFT), (u, v), rho, rho * (u + v))
 
         else:
@@ -179,9 +217,6 @@ def compute_relaxed_dubins_path(q: State, p: Position, rho: float, plot: bool = 
                 b = 2 * np.pi - np.arccos(np.dot(p_prime - c_l, - c_l) / (rho * hyp)) - a 
 
             length = np.sqrt(hyp ** 2 - rho ** 2) + b * rho 
-
-            if not need_path:
-                return length
             
             path = CSPath(Direction.LEFT, b, rho, length)
 
@@ -198,4 +233,4 @@ if __name__ == "__main__":
     angle = np.pi / 3 
     q = State(np.array([-2.0, -5.6]), 4.71)
     p = np.array([0, -7])
-    print(compute_relaxed_dubins_path(q, p, 1, plot = True, verbose_plot = False, need_path = True))
+    print(compute_relaxed_dubins_path(q, p, 1, plot = True, verbose_plot = False))

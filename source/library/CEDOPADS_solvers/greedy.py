@@ -2,10 +2,13 @@
 from classes.problem_instances.cedopads_instances import CEDOPADSInstance, CEDOPADSRoute, load_CPM_HTOP_instances
 import numpy as np 
 import dubins 
-from library.core.relaxed_dubins import compute_relaxed_dubins_path
+from library.core.relaxed_dubins import compute_length_of_relaxed_dubins_path
+from typing import Dict, Tuple
+from time import time
 
+DistanceDatabase = Dict[Tuple[float, int], Tuple[float, int]]
 
-def greedy(problem: CEDOPADSInstance, sensing_radius: float, rho: float, t_max: float, p: float = 1.0) -> CEDOPADSRoute:
+def greedy(problem: CEDOPADSInstance, sensing_radius: float, rho: float, t_max: float, p: float = 1.0, distance_database: DistanceDatabase = None) -> CEDOPADSRoute:
     """Runs a greedy algorithm on the problem instance, by iteratively adding a node from the RCL list to the route"""
     # Initialization
     remaining_distance = t_max 
@@ -13,7 +16,7 @@ def greedy(problem: CEDOPADSInstance, sensing_radius: float, rho: float, t_max: 
     distances_from_sink = {}
     for node in unvisited_nodes:
         for idx_of_theta, theta in enumerate(node.thetas):
-            distances_from_sink[(node.node_id, idx_of_theta)] = compute_relaxed_dubins_path(node.compute_state(sensing_radius, theta), problem.sink, rho)
+            distances_from_sink[(node.node_id, idx_of_theta)] = compute_length_of_relaxed_dubins_path(node.compute_state(sensing_radius, theta), problem.sink, rho)
 
     # Figure out the initial node in the route greedily
     route = []
@@ -26,7 +29,7 @@ def greedy(problem: CEDOPADSInstance, sensing_radius: float, rho: float, t_max: 
 
                 if len(route) == 0:
                     # NOTE: Remember we are computing the length of the "reversed" dubins path.
-                    length_of_dubins_path = compute_relaxed_dubins_path(q.angle_complement(), problem.source, rho)
+                    length_of_dubins_path = compute_length_of_relaxed_dubins_path(q.angle_complement(), problem.source, rho)
                 else:
                     tail = problem.nodes[route[-1][0]].compute_state(sensing_radius, route[-1][1]) # The last state in the route
                     length_of_dubins_path = dubins.shortest_path(tail.to_tuple(), q.to_tuple(), rho).path_length()
@@ -58,7 +61,9 @@ if __name__ == "__main__":
     sensing_radius = 1
     rho = 1
     t_max = 40
+    start = time()
     route = greedy(problem_instance, sensing_radius, rho, t_max, p = 1.0)   
+    print(f"Greedy took: {time() - start} secs")
     problem_instance.plot_with_route(route, sensing_radius, rho)
 
 
