@@ -9,54 +9,6 @@ import matplotlib.pyplot as plt
 import time
 import random
 
-def greedy(problem: CEDOPADSInstance, sensing_radius: float, rho: float, t_max: float, p: float = 1.0) -> CEDOPADSRoute:
-    """Runs a greedy algorithm on the problem instance, with initial routes given"""
-    # Initialization
-    remaining_distance = t_max 
-    unvisited_nodes = set(problem.nodes)
-    distances_from_sink = {}
-    for node in unvisited_nodes:
-        for idx_of_theta, theta in enumerate(node.thetas):
-            distances_from_sink[(node.node_id, idx_of_theta)] = compute_relaxed_dubins_path(node.compute_state(sensing_radius, theta), problem.sink, rho)
-
-    # Figure out the initial node in the route greedily
-    route = []
-    while True:
-        # Compute eligible sdr scores of eligible states
-        sdr_scores_of_eligible_states = {}
-        for node in unvisited_nodes:
-            for idx_of_theta, theta in enumerate(node.thetas):
-                q = problem.nodes[node.node_id].compute_state(sensing_radius, theta)
-
-                if len(route) == 0:
-                    # NOTE: Remember we are computing the length of the "reversed" dubins path.
-                    length_of_dubins_path = compute_relaxed_dubins_path(q.angle_complement(), problem.source, rho)
-                else:
-                    tail = problem.nodes[route[-1][0]].compute_state(sensing_radius, route[-1][1]) # The last state in the route
-                    length_of_dubins_path = dubins.shortest_path(tail.to_tuple(), q.to_tuple(), rho).path_length()
-                    
-                if length_of_dubins_path < remaining_distance - distances_from_sink[(node.node_id, idx_of_theta)]:
-                    sdr_scores_of_eligible_states[(node.node_id, idx_of_theta)] = node.score / length_of_dubins_path
-
-        # If we have no eligible states, simply return the route, since we cannot perform a random greedy choice of the next state.
-        if len(sdr_scores_of_eligible_states) == 0:
-            return route 
-        
-        # Compute the reduces candidate list (RCL) and pick a random state as the next state from the list.
-        else:
-            if p < 1.0:
-                number_of_nodes = int(np.ceil(len(sdr_scores_of_eligible_states) * (1 - p)))
-            else:
-                number_of_nodes = 1
-            
-            rcl = sorted(sdr_scores_of_eligible_states.keys(), key = lambda info: sdr_scores_of_eligible_states[info], reverse=True)[:number_of_nodes] 
-            # NOTE for some reason it coldnt directly chose from RCL
-            i = np.random.choice(range(len(rcl))) 
-            (node_id, idx_of_theta) = rcl[i]
-            route.append((node_id, problem.nodes[node_id].thetas[idx_of_theta]))
-            remaining_distance -= problem.nodes[node_id].score / sdr_scores_of_eligible_states[(node_id, idx_of_theta)] # Gets the length since sdr is score / distance.
-            unvisited_nodes.remove(problem.nodes[node_id]) 
-
 def generate_random_population(problem_instance: CEDOPADSInstance, n_pop: int, sensing_radius: float, rho: float, t_max: float, p: float = 0.8) -> List[CEDOPADSRoute]:
     """Generates a list of CEDOPADS routes"""
     population = []
@@ -80,8 +32,25 @@ def mutate(problem_instance: CEDOPADSInstance, route: CEDOPADSRoute, temperature
 
 def compute_offspring(problem_instance: CEDOPADSInstance, parents: Tuple[CEDOPADSRoute, CEDOPADSRoute]) -> CEDOPADSRoute:
     """Computes the offspring of two parents."""
+    # Sort so that the longest parent is the dad
+    (mum, dad) = sorted(parents, key=len) 
+    #print(f"Parrents: {mum}, {dad}")
+    offspring = []
+    nodes_visited = set()
+    for (mum_k, mum_psi), (dad_k, dad_psi) in zip(mum, dad):
+        if np.random.uniform(0, 1) < 0.5:
+            candidate_gene = (mum_k, mum_psi)
+        else:
+            candidate_gene = (dad_k, dad_psi)
+        
+        # It does not work if we have two identical candidate genes.
+        if len(offspring) == 0 or candidate_gene != offspring[-1]:
+            offspring.append(candidate_gene) 
     
-    return parents[0]
+    offspring.extend(filter(lambda tup: tup[0] not in nodes_visited, dad[len(mum):])) # Add the final part of dad to the offspring
+    #print(f" - Offspring: {offspring}")
+
+    return offspring 
 
 def memetic_algorithm(problem_instance: CEDOPADSInstance, n_pop: int, sensing_radius: float, rho: float, t_max: float, time_budget: float = 60, debug: bool = False) -> CEDOPADSRoute:
     """Runs a memetic algorithm on the problem instance, using a population sized of n_pop."""
@@ -106,11 +75,12 @@ def memetic_algorithm(problem_instance: CEDOPADSInstance, n_pop: int, sensing_ra
         penalties = np.array([compute_penalty(problem_instance.compute_length_of_route(route, sensing_radius, rho), t_max, remaining_time) for route in population])
 
         # Penalize routes which are to long more and more as time goes on.
-        fitnesses = scores - (penalties / (ratio_of_time_remaining ** 2)) 
+        # TODO: We want this to be non-negative!
+        fitnesses = scores - (penalties / (ratio_of_time_remaining ** 3)) 
 
         # Check if we have a new goat.
         candidates_and_scores = [(route, scores[i]) for i, route in enumerate(population) if penalties[i] == 0]
-        (candidate, score_of_candidate) = max(candidates_and_scores, key=lambda tup: tup[1])
+        (candidate, score_of_candidate) = max(candidates_and_scores + [(None, 0)], key=lambda tup: tup[1])
         if score_of_candidate > score_of_goat:
             goat = candidate
             score_of_goat = score_of_candidate
@@ -118,8 +88,9 @@ def memetic_algorithm(problem_instance: CEDOPADSInstance, n_pop: int, sensing_ra
 
         # Plot the best routes, which obeys the distance constraint, in a non-blocking way
         if debug: 
-            scores_of_candidates = [score for _, score in candidates_and_scores]
-            routes = [route for i, (route, _) in enumerate(candidates_and_scores) if (i in np.argpartition(scores_of_candidates, -4)[-4:])]
+            scores_of_candidates = [score for (_, score) in candidates_and_scores]
+            number_of_routes = min(len(candidates_and_scores), 4)
+            routes = [route for i, (route, _) in enumerate(candidates_and_scores) if (i in np.argpartition(scores_of_candidates, -number_of_routes)[-number_of_routes:])]
             problem_instance.plot_with_routes(routes, sensing_radius, rho, show = False)
             plt.draw()
             plt.show()

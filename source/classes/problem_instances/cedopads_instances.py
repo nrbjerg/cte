@@ -163,6 +163,7 @@ class CEDOPADSInstance:
     
     def plot_with_routes(self, routes: List[CEDOPADSRoute], sensing_radius: float, rho: float, colors: List[str] = ["tab:orange", "tab:green", "tab:red", "tab:blue", "tab:purple", "tab:cyan"], show: bool = False):
         """Plots multiple CEDOPADS routes on top of the plot"""
+        print(f"Routes: {routes}")
         self.plot(sensing_radius, set())
 
         if len(routes) > len(colors):
@@ -178,9 +179,9 @@ class CEDOPADSInstance:
 
             # 2. Plot the dubins trajectories between q_i, q_i + 1
             for i in range(len(q) - 1):
-                q0 = (q[i].pos[0], q[i].pos[1], q[i].angle)
-                q1 = (q[i + 1].pos[0], q[i + 1].pos[1], q[i + 1].angle)
-                configurations = np.array(dubins.path_sample(q0, q1, rho, 0.1)[0])
+                print(f"From: {q[i]}, to: {q[i + 1]}")
+                configurations = np.array(dubins.path_sample(q[i].to_tuple(), q[i + 1].to_tuple(), rho, 0.1)[0])
+                print(f"Configurations: {configurations}")
                 plt.plot(configurations[:, 0], configurations[:, 1], c = color)
 
             # 3. Plot route from q_M to the sink 
