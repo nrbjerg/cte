@@ -6,19 +6,26 @@ from library.core.relaxed_dubins import compute_length_of_relaxed_dubins_path
 from typing import Dict, Tuple
 from time import time
 
-DistanceDatabase = Dict[Tuple[float, int], Tuple[float, int]]
+DistanceDatabase = Dict[Tuple[int, int], float]
 
-def greedy(problem: CEDOPADSInstance, sensing_radius: float, rho: float, t_max: float, p: float = 1.0, distance_database: DistanceDatabase = None) -> CEDOPADSRoute:
+def compute_distances_from_sink(problem: CEDOPADSInstance, sensing_radius: float, rho) -> DistanceDatabase:
+    """Computes the distances to the sink from each of the states, correseponding to each node and its thetas."""
+    distances_from_sink = {}
+    for node in problem.nodes:
+        for idx_of_theta, theta in enumerate(node.thetas):
+            distances_from_sink[(node.node_id, idx_of_theta)] = compute_length_of_relaxed_dubins_path(node.compute_state(sensing_radius, theta), problem.sink, rho)
+
+    return distances_from_sink
+
+def greedy(problem: CEDOPADSInstance, sensing_radius: float, rho: float, t_max: float, p: float = 1.0, distances_from_sink: DistanceDatabase = None) -> CEDOPADSRoute:
     """Runs a greedy algorithm on the problem instance, by iteratively adding a node from the RCL list to the route"""
     # Initialization
     remaining_distance = t_max 
     unvisited_nodes = set(problem.nodes)
-    distances_from_sink = {}
-    for node in unvisited_nodes:
-        for idx_of_theta, theta in enumerate(node.thetas):
-            distances_from_sink[(node.node_id, idx_of_theta)] = compute_length_of_relaxed_dubins_path(node.compute_state(sensing_radius, theta), problem.sink, rho)
+    if distances_from_sink == None:
+        distances_from_sink = compute_distances_from_sink(problem, sensing_radius, rho)
 
-    # Figure out the initial node in the route greedily
+    # Iteratively pick the node with the highest sdr score.
     route = []
     while True:
         # Compute eligible sdr scores of eligible states
@@ -34,7 +41,7 @@ def greedy(problem: CEDOPADSInstance, sensing_radius: float, rho: float, t_max: 
                     tail = problem.nodes[route[-1][0]].compute_state(sensing_radius, route[-1][1]) # The last state in the route
                     length_of_dubins_path = dubins.shortest_path(tail.to_tuple(), q.to_tuple(), rho).path_length()
                     
-                if length_of_dubins_path < remaining_distance - distances_from_sink[(node.node_id, idx_of_theta)]:
+                if length_of_dubins_path + distances_from_sink[(node.node_id, idx_of_theta)] < remaining_distance:
                     sdr_scores_of_eligible_states[(node.node_id, idx_of_theta)] = node.score / length_of_dubins_path
 
         # If we have no eligible states, simply return the route, since we cannot perform a random greedy choice of the next state.
@@ -60,10 +67,12 @@ if __name__ == "__main__":
     problem_instance = load_CPM_HTOP_instances(needs_plotting = True)[0]
     sensing_radius = 1
     rho = 1
-    t_max = 40
+    t_max = 100 
     start = time()
-    route = greedy(problem_instance, sensing_radius, rho, t_max, p = 1.0)   
-    print(f"Greedy took: {time() - start} secs")
-    problem_instance.plot_with_route(route, sensing_radius, rho)
+    distances_from_sink = compute_distances_from_sink(problem_instance, sensing_radius, rho)
+    for i in range(10_000):
+        route = greedy(problem_instance, sensing_radius, rho, t_max, p = 0.8, distances_from_sink=distances_from_sink)   
+    print(f"Greedy took: {time() - start} secs") # Without numba 98.4s (a fair bit of variation 1000 iterations took 8.5s)
+    #problem_instance.plot_with_route(route, sensing_radius, rho)
 
 
