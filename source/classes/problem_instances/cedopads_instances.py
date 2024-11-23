@@ -8,7 +8,7 @@ import os
 import numpy as np
 from matplotlib import pyplot as plt 
 import matplotlib.lines as mlines
-from library.core.relaxed_dubins import compute_relaxed_dubins_path
+from library.core.relaxed_dubins import compute_relaxed_dubins_path, compute_length_of_relaxed_dubins_path
 
 plt.rcParams['figure.figsize'] = [9, 9]
 
@@ -159,6 +159,8 @@ class CEDOPADSInstance:
             final_path = compute_relaxed_dubins_path(q[-1], self.sink, rho)
             final_path.plot(q[-1], self.sink, color = color)
 
+        indicators = [mlines.Line2D([], [], color=color, label=f"Score: {round(self.compute_score_of_route(route), 2)}, Length: {round(self.compute_length_of_route(route, sensing_radius, rho), 2)}", marker="s")]
+        plt.legend(handles=indicators, loc=1)
         plt.plot()
     
     def plot_with_routes(self, routes: List[CEDOPADSRoute], sensing_radius: float, rho: float, colors: List[str] = ["tab:orange", "tab:green", "tab:red", "tab:blue", "tab:purple", "tab:cyan"], show: bool = False):
@@ -205,9 +207,9 @@ class CEDOPADSInstance:
         q = self.get_states(route, sensing_radius) 
         tups = [q[i].to_tuple() for i in range(len(q))]
 
-        return (compute_relaxed_dubins_path(q[0].angle_complement(), self.source, rho) + 
+        return (compute_length_of_relaxed_dubins_path(q[0].angle_complement(), self.source, rho) + 
                 sum([dubins.shortest_path(tups[i], tups[i + 1], rho).path_length() for i in range(len(q) - 1)]) +
-                compute_relaxed_dubins_path(q[-1], self.sink, rho))
+                compute_length_of_relaxed_dubins_path(q[-1], self.sink, rho))
 
     def compute_score_of_route(self, route: CEDOPADSRoute) -> float:
         """Computes the score of a CEDOPADS route."""
