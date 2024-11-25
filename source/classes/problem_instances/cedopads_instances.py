@@ -1,7 +1,7 @@
 # %% 
 from __future__ import annotations
 from dataclasses import dataclass 
-from typing import List, Tuple, Set
+from typing import List, Tuple, Set, Optional
 from classes.data_types import Position, AngleInterval, Angle, State
 import dubins
 import os 
@@ -63,6 +63,15 @@ class CEDOPADSNode:
                 return self.score * np.cos((self.thetas[i] - psi) / self.zetas[i])
 
         return 0 
+
+    def get_angle_interval(self, psi: float) -> Optional[AngleInterval]:
+        """Returns the angle interval which contains the given psi."""
+        for interval in self.intervals:
+            if interval.contains(psi):
+                return interval
+            
+        # If there is no angle inteval which contains psi return none
+        return None 
 
     def plot(self, sensing_radius: float, color: str = "tab:gray") -> None:
         """Plots the point, and the angle cones."""
@@ -165,7 +174,6 @@ class CEDOPADSInstance:
     
     def plot_with_routes(self, routes: List[CEDOPADSRoute], sensing_radius: float, rho: float, colors: List[str] = ["tab:orange", "tab:green", "tab:red", "tab:blue", "tab:purple", "tab:cyan"], show: bool = False):
         """Plots multiple CEDOPADS routes on top of the plot"""
-        print(f"Routes: {routes}")
         self.plot(sensing_radius, set())
 
         if len(routes) > len(colors):
@@ -176,21 +184,19 @@ class CEDOPADSInstance:
             for q_i in q:
                 plt.scatter(*q_i.pos, marker="s", c = color, zorder=2)
 
-            first_path = compute_relaxed_dubins_path(q[0].angle_complement(), self.source, rho, need_path=True)
+            first_path = compute_relaxed_dubins_path(q[0].angle_complement(), self.source, rho)
             first_path.plot(q[0].angle_complement(), self.source, color = color)
 
             # 2. Plot the dubins trajectories between q_i, q_i + 1
             for i in range(len(q) - 1):
-                print(f"From: {q[i]}, to: {q[i + 1]}")
                 configurations = np.array(dubins.path_sample(q[i].to_tuple(), q[i + 1].to_tuple(), rho, 0.1)[0])
-                print(f"Configurations: {configurations}")
                 plt.plot(configurations[:, 0], configurations[:, 1], c = color)
 
             # 3. Plot route from q_M to the sink 
-            final_path = compute_relaxed_dubins_path(q[-1], self.sink, rho, need_path=True)
+            final_path = compute_relaxed_dubins_path(q[-1], self.sink, rho)
             final_path.plot(q[-1], self.sink, color = color)
 
-        indicators = [mlines.Line2D([], [], color=color, label=f"Score: {round(self.compute_score_of_route(route), 2)}", marker="s") for color, route in zip(colors, routes)]
+        indicators = [mlines.Line2D([], [], color=color, label=f"Score: {round(self.compute_score_of_route(route), 2)}, Length: {round(self.compute_length_of_route(route, sensing_radius, rho), 2)}", marker="s") for color, route in zip(colors, routes)]
         plt.legend(handles=indicators, loc=1)
         if show: 
             plt.plot()
@@ -219,7 +225,7 @@ class CEDOPADSInstance:
         """Checks if the route is feasable."""
         return self.compute_length_of_route(route, sensing_radius, rho) <= tmax
 
-def load_CPM_HTOP_instances(needs_plotting: bool = False) -> List[CEDOPADSInstance]:
+def load_CEDOPADS_instances(needs_plotting: bool = False) -> List[CEDOPADSInstance]:
     """Loads the set of TOP instances saved within the resources folder."""
     folder_with_top_instances = os.path.join(os.getcwd(), "resources", "CEDOPADS")
     return [CEDOPADSInstance.load_from_file(file_name, needs_plotting = needs_plotting) 
