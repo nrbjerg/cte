@@ -54,5 +54,5 @@ for idx, file_id in enumerate(os.listdir(path_to_instances)):
 
             file.write("\n".join(info_and_depots + new_lines))
         
-#problem_instance = CEDOPADSInstance.load_from_file("set_64_1_60.txt", needs_plotting = True)
-#problem_instance.plot(r = 1, show = True)
+problem_instance = CEDOPADSInstance.load_from_file("p4.0.txt", needs_plotting = True)
+problem_instance.plot(1, [], show = True)
