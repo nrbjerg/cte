@@ -13,7 +13,7 @@ from library.core.relaxed_dubins import compute_relaxed_dubins_path, compute_len
 plt.rcParams['figure.figsize'] = [9, 9]
 
 # Models a CEDOPADS route
-CEDOPADSRoute = List[Tuple[int, Angle]]
+CEDOPADSRoute = List[Tuple[int, Angle, Angle]] # a list of tuples of the form (k, psi, tau)
 
 class CEDOPADSNode:
     """Models a node in the DTOPADS problem."""
@@ -56,11 +56,13 @@ class CEDOPADSNode:
 
         return CEDOPADSNode(node_id, pos, score, thetas, phis, zetas)
          
-    def compute_score(self, psi: float) -> float:
+    def compute_score(self, psi: Angle, tau: Angle, eta: float) -> float:
         """Computes the score of the given node, given a heading angle psi."""
-        for i, interval in enumerate(self.intervals):
+        for j, interval in enumerate(self.intervals):
             if interval.contains(psi):
-                return self.score * np.cos((self.thetas[i] - psi) / self.zetas[i])
+                # TODO: 
+                return self.score * np.cos((psi - self.thetas[j]) / self.zetas[j]) * np.cos((tau - psi) / (self.zetas[j] * eta))
+            #np.cos((self.thetas[i] - psi) / self.zetas[i])
 
         return 0 
 
@@ -85,10 +87,10 @@ class CEDOPADSNode:
         #    offset = sensing_radius * np.array([np.cos(theta), np.sin(theta)])
         #    plt.plot([self.pos[0], self.pos[0] - offset[0]], [self.pos[1], self.pos[1] - offset[1]], c = color)
 
-    def compute_state(self, sensing_radius: float, psi: Angle) -> State:
+    def get_state(self, sensing_radius: float, psi: Angle, tau: Angle) -> State:
         """Computes the state corresponding to """
         offset = sensing_radius * np.array([np.cos(psi), np.sin(psi)])
-        return State(self.pos - offset, psi)
+        return State(self.pos - offset, tau)
                     
 @dataclass
 class CEDOPADSInstance:
@@ -103,7 +105,6 @@ class CEDOPADSInstance:
         """Loads a DTOPADS instance from a given problem id."""
         with open(os.path.join(os.getcwd(), "resources", "CEDOPADS", file_name), "r") as file:
             lines = list(map(lambda line: line.strip(), file.read().splitlines())) 
-            tmax = float(lines[0].split(" ")[0])
             (x_pos, y_pos, _) = map(float, lines[1].split(" "))
             source = np.array((x_pos, y_pos))
 
@@ -203,10 +204,7 @@ class CEDOPADSInstance:
 
     def get_states(self, route: CEDOPADSRoute, sensing_radius: float) -> List[State]:
         """Returns a list of states corresponding to q_1, ..., q_M from the problem formulation."""
-        states = []
-        for k, psi in route:
-            states.append(self.nodes[k].compute_state(sensing_radius, psi))
-        return states
+        return [self.nodes[k].get_state(sensing_radius, psi, tau) for k, psi, tau in route]
 
     def compute_length_of_route(self, route: CEDOPADSRoute, sensing_radius: float, rho: float) -> float:
         """Computes the length of the route, for the given sensing radius and turning radius rho."""
@@ -217,9 +215,9 @@ class CEDOPADSInstance:
                 sum([dubins.shortest_path(tups[i], tups[i + 1], rho).path_length() for i in range(len(q) - 1)]) +
                 compute_length_of_relaxed_dubins_path(q[-1], self.sink, rho))
 
-    def compute_score_of_route(self, route: CEDOPADSRoute) -> float:
+    def compute_score_of_route(self, route: CEDOPADSRoute, eta: float) -> float:
         """Computes the score of a CEDOPADS route."""
-        return sum([self.nodes[k].compute_score(psi) for (k, psi) in route])
+        return sum([self.nodes[k].compute_score(psi, tau, eta) for (k, psi, tau) in route])
 
     def is_route_feasable(self, route: CEDOPADSRoute, sensing_radius: float, rho: float, tmax: float) -> bool:
         """Checks if the route is feasable."""
