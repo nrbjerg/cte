@@ -1,3 +1,4 @@
+# %%
 from __future__ import annotations
 from numpy.typing import ArrayLike
 import numpy as np
@@ -52,11 +53,11 @@ class AngleInterval:
     def plot(self, ancour: Position, r: float, color: str, alpha: float):
         """Plots the angle as a circle arc of radius r with a center at the ancour point"""
         # The angles from the centers 
-        a0, b0 = (self.a + np.pi) % (2 * np.pi), (self.b + np.pi) % (2 * np.pi)
-        if a0 < b0:
-            angles = np.linspace(a0, b0, 50) 
+        #a0, b0 = (self.a + np.pi) % (2 * np.pi), (self.b + np.pi) % (2 * np.pi)
+        if self.a < self.b:
+            angles = np.linspace(self.a, self.b, 50) 
         else:
-            angles = np.linspace(a0, (2 * np.pi) * (a0 // (2 * np.pi) + 1) + b0, 50)
+            angles = np.linspace(self.a, (2 * np.pi) * (self.a // (2 * np.pi) + 1) + self.b, 50)
 
         points_on_arc = np.vstack((ancour[0] + r * np.cos(angles),  
                                    ancour[1] + r * np.sin(angles)))
@@ -65,14 +66,14 @@ class AngleInterval:
         cone = patches.Polygon(points, closed=True, color = color, alpha = alpha)
         plt.gca().add_patch(cone)
 
-    def generate_random_uniform_angle(self) -> Angle:
+    def generate_uniform_angle(self) -> Angle:
         """Generates a random angle from the angle interval, uniformly."""
         if self.a < self.b:
             return np.random.uniform(self.a, self.b)
         
         # Either generate an angle above or below the x axis depending on the proporition of the 
         # propotion of the arc described by the angle interval being above / below the x axis.
-        elif random.choices([0, 1], weights = [2 * np.pi - self.a, self.b], k = 1)[0] == 1:
+        elif random.choices([0, 1], weights = [self.b, 2 * np.pi - self.a], k = 1)[0] == 1:
             return np.random.uniform(self.a, 2 * np.pi)
         else:
             return np.random.uniform(0, self.b)
@@ -94,3 +95,12 @@ class AngleInterval:
             return self.a
         else:
             return psi
+
+if __name__ == "__main__":
+    interval = AngleInterval(5 / 3 * np.pi, 0)
+    for _ in range(100):
+        angle = interval.generate_uniform_angle()
+        position = np.array([np.cos(angle), np.sin(angle)])
+        plt.scatter(*position)
+    interval.plot(np.array([0, 0]), 1, "tab:orange", 0.2)
+
