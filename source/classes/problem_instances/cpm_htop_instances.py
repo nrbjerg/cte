@@ -172,7 +172,7 @@ class CPM_HTOP_Instance:
 
     def plot (self, show: bool = True, plot_nodes: bool = True, edges_to_exclude: Set[Tuple[int, int]] = set()):
         """Displays a plot of the problem instance, along with its delauney triangulation"""
-        plt.style.use("seaborn-v0_8-whitegrid")
+        plt.style.use("bmh")
         plt.gca().set_aspect("equal", adjustable="box")
 
         edges_plotted = set()

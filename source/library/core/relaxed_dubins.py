@@ -234,7 +234,7 @@ def compute_length_of_relaxed_dubins_path(q: State, p: Position, rho: float) -> 
 
 def can_be_reached(q: State, p: Position, rho: float, remaining_travel_budget: float) -> bool:
     """Simply checks if the position p can be reached using a relaxed dubins path from the state q."""
-    return compute_compute_length_of_relaxed_dubins_path(q, p, rho, need_path=False) < remaining_travel_budget 
+    return compute_length_of_relaxed_dubins_path(q, p, rho, need_path=False) < remaining_travel_budget 
 
 if __name__ == "__main__":
     angle = np.pi / 3 

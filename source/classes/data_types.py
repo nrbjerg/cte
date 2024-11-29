@@ -40,7 +40,6 @@ class AngleInterval:
         """Checks if the two angle intervals intercepts each other"""
         return any([self.contains(other.a), self.contains(other.b), 
                     other.contains(self.a), other.contains(self.b)])
-        # FIXME I dont know if the last line is neccesary.
 
     def contains(self, psi: Angle) -> bool:
         """Checks if psi is contained within the interval"""
@@ -76,7 +75,22 @@ class AngleInterval:
         elif random.choices([0, 1], weights = [2 * np.pi - self.a, self.b], k = 1)[0] == 1:
             return np.random.uniform(self.a, 2 * np.pi)
         else:
-            return np.random.unifomr(0, self.b)
+            return np.random.uniform(0, self.b)
 
     def __repr__ (self) -> str:
+        """Returns a string representation of the angle interval."""
         return f"[{round(self.a, 3)}; {round(self.b, 3)}]"
+
+    def constrain(self, psi: Angle) -> Angle:
+        """Constrain psi to the angle interval."""
+        psi %= (2 * np.pi)
+        if self.a < self.b and psi < self.a:
+            return self.a
+        elif self.a < self.b and psi > self.b:
+            return self.b
+        elif self.a > self.b and psi < self.b:
+            return self.b
+        elif self.a > self.b and psi > self.a:
+            return self.a
+        else:
+            return psi
