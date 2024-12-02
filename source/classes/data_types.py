@@ -11,7 +11,18 @@ import random
 Position = ArrayLike
 Velocity = ArrayLike
 Matrix = ArrayLike
+
 Angle = float
+
+def compute_difference_between_angles(a: Angle, b: Angle) -> Angle:
+    """Computes the difference in radians between a and b"""
+    return np.arccos(np.cos(a) * np.cos(b) + np.sin(a) * np.sin(b))
+    #a %= 2 * np.pi
+    #b %= 2 * np.pi
+    #if np.sign(a - np.pi) == np.sign(b - np.pi):
+    #    return a - b
+    #else:
+    #    return np.abs(a + b - 2 * np.pi)
 
 @dataclass
 class State:
@@ -26,6 +37,11 @@ class State:
     def angle_complement(self) -> State:
         """Returns the same state, with the angle fliped 180 degrees."""
         return State(self.pos, (np.pi + self.angle) % (2 * np.pi))
+
+    def plot(self, color = "tab:orange"):
+        """Plots the state using matplotlib."""
+        plt.scatter(*self.pos, c=color)
+        plt.quiver(*self.pos, np.cos(self.angle), np.sin(self.angle), color = color, width = 0.005)
 
     def __repr__ (self) -> str:
         return f"{(round(float(self.pos[0]), 2), round(float(self.pos[1]), 2), round(self.angle, 2))}"
@@ -97,7 +113,7 @@ class AngleInterval:
             return psi
 
 if __name__ == "__main__":
-    interval = AngleInterval(5 / 3 * np.pi, 0)
+    interval = AngleInterval(5 / 3 * np.pi, np.pi)
     for _ in range(100):
         angle = interval.generate_uniform_angle()
         position = np.array([np.cos(angle), np.sin(angle)])
