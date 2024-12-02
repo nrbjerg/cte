@@ -6,11 +6,11 @@ from classes.data_types import AngleInterval
 from classes.problem_instances.cedopads_instances import CEDOPADSInstance
 import random
 
-NUMBER_OF_RELATED_INSTANCES = 100 
+NUMBER_OF_RELATED_INSTANCES = 1 
 path_to_instances = os.path.join(os.getcwd(), "resources", "OP")
 for idx, file_id in enumerate(os.listdir(path_to_instances)):
-    np.random.seed(idx)
     for instance_number in range(NUMBER_OF_RELATED_INSTANCES):
+        print(instance_number)
         with open(os.path.join(path_to_instances, file_id), "r") as file:
             lines = list(map(lambda line: line.replace("\t", " "), file.read().splitlines()))
 
@@ -22,7 +22,8 @@ for idx, file_id in enumerate(os.listdir(path_to_instances)):
             # Angles 
             thetas = [np.random.uniform(0, 2 * np.pi) for _ in range(ell)]
             phis = [np.pi * (np.random.uniform(0.2, 0.8) ** 2) for _ in range(ell)]
-            zetas = [1 + np.random.exponential() for _ in range(ell)]
+            zetas = [phi + np.random.exponential(size=1)[0] for phi in phis]
+            assert all([phi <= zeta for phi, zeta in zip(phis, zetas)])
 
             # Check for overlap and remove indicies if needed
             Js = [AngleInterval(theta - phi, theta + phi) for theta, phi in zip(thetas, phis)]
@@ -30,7 +31,6 @@ for idx, file_id in enumerate(os.listdir(path_to_instances)):
             indicies_to_remove = []
             for i in range(ell): 
                 for j in range(i + 1, ell):
-                    print(i, j, ell)
                     if i in indicies_to_remove:
                         continue
 
@@ -48,10 +48,7 @@ for idx, file_id in enumerate(os.listdir(path_to_instances)):
                 new_lines[-1] += (f"{round(theta, 3)} {round(phi, 3)} {round(zeta, 3)},")
             new_lines[-1] = new_lines[-1][:-1] # Remove the final comma
 
-        print(new_lines)
-
         with open(os.path.join(os.getcwd(), "resources", "CEDOPADS", file_id.split(".")[0] + f".{instance_number}.txt"), "w+") as file:
-
             file.write("\n".join(info_and_depots + new_lines))
         
 problem_instance = CEDOPADSInstance.load_from_file("p4.0.txt", needs_plotting = True)
