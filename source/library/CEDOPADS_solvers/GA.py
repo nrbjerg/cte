@@ -5,7 +5,7 @@ from typing import List, Tuple, Optional
 import numpy as np
 from classes.problem_instances.cedopads_instances import CEDOPADSInstance, load_CEDOPADS_instances, CEDOPADSRoute
 from library.core.relaxed_dubins import compute_length_of_relaxed_dubins_path
-from classes.data_types import State, Angle
+from classes.data_types import State, Angle, AngleInterval
 from classes.node import Node
 from scipy.special import binom
 import hashlib
@@ -62,8 +62,7 @@ class GA:
         # We wish to add a penalty to penalize routes which are to long
         # and to make the penalty more and more suvere as time is running out.
         length_penalty = 1 / (1 + np.exp(max(length - self.t_max, 0))) 
-        # NOTE: Reduces to the SDR score when the length of the route < t_max
-        return 2 * (1 - length_penalty) * (score ** 3 / length)
+        return 2 * (1 - length_penalty) * (score ** 3 / length)  # TODO: We need to include the ratio of time remaning into the fitness function
      
     # Modeled as k-point crossover where k is the number of parents.
     def crossover(self, parents: List[CEDOPADSRoute], k: int = 2) -> List[CEDOPADSRoute]:
@@ -95,18 +94,6 @@ class GA:
 
         return offspring 
 
-#    def compute_modified_sdr_scores(self, individual: CEDOPADSRoute) -> List[float]:
-#        """Computes the sdr scores of the individual, using different formulas depending on the number of visists in the route"""
-#        match len(individual):
-#            case 0:
-#                return []
-#            case 1:
-#                score = self.problem.compute_score_of_route(individual)
-#                distance = self.problem.compute_length_of_route(individual, self.sensing_radius, self.rho)
-#                return [score / distance]
-#            case _:
-#                return [] # TODO:
-            
     def pick_new_visit(self, individual: CEDOPADSRoute, ratio_of_time_remaining: float) -> Tuple[int, Angle, Angle]:
         """Picks a new place to visit, according to how much time is left to run the algorithm."""
         # For the time being simply pick a random node to visit FIXME: Should be updated, 
@@ -119,7 +106,7 @@ class GA:
 
         return (k, psi, tau)
 
-    def mutate(self, individual: CEDOPADSRoute, ratio_of_time_remaining: float, prob_of_adding_visit_given_no_removal: float = 0.3) -> CEDOPADSRoute: 
+    def mutate(self, individual: CEDOPADSRoute, ratio_of_time_remaining: float, prob_of_adding_visit_given_no_removal: float = 0.3, prob_of_performing_uniform_mutation: float = 0.2) -> CEDOPADSRoute: 
         """Copies and mutates the copy of the individual, based on the time remaining biasing the removal of visits if the route is to long, and otherwise adding / replacing visits within the route."""
         # We only wish to remove visits if the route is to long!
         probability_of_removal = ratio_of_time_remaining * max(0, problem.compute_length_of_route(individual, sensing_radius, rho) - self.t_max)
@@ -148,10 +135,29 @@ class GA:
             else:
                 mutated_individual = [new_visit]
 
-        # TODO: Compute new angles in order to find better solutions
+        # It is probabily disiarable to use a non-uniform mutation operator on the angles which stays in the current angle intervals
+        # and have a non-zero probability perhaps close to 50% of generating a random new angle in another angle interval if the node
+        # k has more than one permitable angle interval.
         for idx, (k, psi, tau) in enumerate(mutated_individual):
-            pass 
+            if random.uniform(0, 1) < prob_of_performing_uniform_mutation:
 
+                # Compute probabilities of picking an angle intervals based on their "arc lengths"
+                # with higher arc lengths having having  a higher probability of getting chosen.
+                arc_lengths = []
+                for interval in self.problem.nodes[k]:
+                    arc_length = interval.b - interval.a if interval.a < interval.b else (2 * np.pi - interval.b) + interval.a
+                    arc_lengths.append(arc_length)
+
+                interval_probabilities = np.array(arc_lengths) / sum(arc_lengths)
+                interval: AngleInterval = np.random.choice(self.problem.nodes[k].intervals, size = 1, p = interval_probabilities)
+                
+                # Generate angles from interval
+                new_psi = interval.generate_uniform_angle()
+                new_tau = (new_psi + np.pi + np.random.uniform( - self.eta / 2, self.eta / 2)) % (2 * np.pi)
+
+                # Mutate the given allele.
+                mutated_individual[idx] = (k, new_psi, new_tau)
+            
         return mutated_individual
 
     def run(self, time_budget: float, m: int, k: int = 2, debug: bool = False, mutation_probability: float = 0.6) -> CEDOPADSRoute:
