@@ -12,6 +12,7 @@ import hashlib
 from tqdm import tqdm
 from itertools import combinations_with_replacement
 from scipy.stats import truncnorm
+from collections import OrderedDict
 import matplotlib.pyplot as plt
 
 class GA:
@@ -103,11 +104,21 @@ class GA:
                     else:
                         child.extend(parent[indicies[jdx][idx]:indicies[jdx][idx + 1]])
 
+                # Remove dublicate visits to the same node, since these do not increase the collected score.
+                seen = set()
+                idx = 0
+                while idx < len(child):
+                    if child[idx][0] in seen:
+                        child.pop(idx)
+                    else:
+                        seen.add(child[idx][0])
+                        idx += 1
+
             offspring.append(child)
 
         return offspring 
 
-    def order_crossover(self, parents: List[CEDOPADSRoute]) -> List[CEDOPADSRoute]:
+    def samir_crossover(self, parents: List[CEDOPADSRoute]) -> List[CEDOPADSRoute]:
         """Performs order crossover, by iteratively selecting two parents and producing their offspring."""
         # Compute offspring for each pair of parents included in the parents list.
         offspring = []
@@ -330,9 +341,9 @@ if __name__ == "__main__":
     problem: CEDOPADSInstance = CEDOPADSInstance.load_from_file("p4.0.txt", needs_plotting = True)
     t_max = 200
     rho = 4
-    sensing_radius = 2
+    sensing_radius = 3
     eta = np.pi / 5
     ga = GA(problem, t_max, eta, rho, sensing_radius)
-    route = ga.run(60, 5, ga.exponential_ranking, ga.crossover, ga.mu_comma_lambda_selection)
+    route = ga.run(60, 4, ga.exponential_ranking, ga.crossover, ga.mu_comma_lambda_selection)
     problem.plot_with_route(route, sensing_radius, rho, eta)
     plt.plot()
