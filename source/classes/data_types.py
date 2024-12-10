@@ -7,6 +7,7 @@ from typing import Tuple
 from matplotlib import pyplot as plt 
 from matplotlib import patches
 import random
+from scipy.stats import truncnorm
 
 Position = ArrayLike
 Velocity = ArrayLike
@@ -94,6 +95,17 @@ class AngleInterval:
         else:
             return np.random.uniform(0, self.b)
 
+    def generate_truncated_normal_angle(self, mean: float, scale_modifier: float = 0.05) -> Angle:
+        """Generates a truncated normal angle, with a given mean."""
+        # NOTE: Please have a look at the following website https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.truncnorm.html#scipy.stats.truncnorm
+        # for documentation on the truncnorm.rvs method and its arguments.
+        if self.a < self.b:
+            scale = scale_modifier * (self.b - self.a) 
+            return truncnorm.rvs((self.a - mean) / scale, (self.b - mean)  / scale, loc = mean, scale = scale)
+        else:
+            scale = scale_modifier * (2 * np.pi - self.b + self.a)
+            return truncnorm.rvs((self.a - mean)  / scale, (self.b + 2 * np.pi - mean) / scale, loc = mean, scale = scale) % (2 * np.pi)
+
     def __repr__ (self) -> str:
         """Returns a string representation of the angle interval."""
         return f"[{round(self.a, 3)}; {round(self.b, 3)}]"
@@ -113,10 +125,25 @@ class AngleInterval:
             return psi
 
 if __name__ == "__main__":
-    interval = AngleInterval(5 / 3 * np.pi, np.pi)
-    for _ in range(100):
-        angle = interval.generate_uniform_angle()
-        position = np.array([np.cos(angle), np.sin(angle)])
-        plt.scatter(*position)
-    interval.plot(np.array([0, 0]), 1, "tab:orange", 0.2)
+    interval = AngleInterval(5, 1)
+    angles = []
+    eta = np.pi / 2
+    
+    #for _ in range(100):
+        #psi = interval.generate_truncated_normal_angle(5.6)
+        #tau = truncnorm.rvs(- eta / 2, eta / 2, loc = np.pi + psi) % (2 * np.pi)
+        #point = (np.cos(psi), np.sin(psi))
+        #jnterval = AngleInterval(tau - eta / 2, tau + eta / 2)
+        #jnterval.plot(point, 1, "tab:blue", 0.1)
 
+        #plt.scatter(*point)
+        #plt.quiver(*point, np.cos(tau), np.sin(tau))
+    
+    #interval.plot((0,0), 1, "tab:orange", 0.2)
+    
+    for _ in range(100000):
+        angles.append(interval.generate_truncated_normal_angle(5.5))
+    plt.hist(angles, bins = 200)
+    plt.plot()
+
+# %%
