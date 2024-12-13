@@ -1,7 +1,7 @@
 # %% 
 from __future__ import annotations
 from dataclasses import dataclass 
-from typing import List, Tuple, Set, Optional
+from typing import List, Tuple, Set, Optional, Dict
 from classes.data_types import Position, AngleInterval, Angle, State, compute_difference_between_angles
 import dubins
 import os 
@@ -9,11 +9,27 @@ import numpy as np
 from matplotlib import pyplot as plt 
 import matplotlib.lines as mlines
 from library.core.relaxed_dubins import compute_relaxed_dubins_path, compute_length_of_relaxed_dubins_path
+from numba import njit, int32, float32
 
 plt.rcParams['figure.figsize'] = [9, 9]
 
 # Models a CEDOPADS route
-CEDOPADSRoute = List[Tuple[int, Angle, Angle]] # a list of tuples of the form (k, psi, tau)
+Visit = Tuple[int, Angle, Angle]
+CEDOPADSRoute = List[Visit] # a list of tuples of the form (k, psi, tau)
+
+@njit()
+def _compute_score(score: float, theta: float, zeta: float, psi: float, tau: float, eta: float) -> float:
+    """Used to compute the score given all of the values."""
+    # The difference between psi and theta measured in radians.
+    weight_from_psi = np.cos(compute_difference_between_angles(psi, theta) / zeta)
+    weight_from_tau = np.exp(- compute_difference_between_angles(tau, (psi + np.pi) % (2 * np.pi)) / eta)
+
+    return score * weight_from_psi * weight_from_tau
+
+@njit()
+def _compute_position(pos: Position, sensing_radius: float, psi: float) -> Position:
+    """Computes the position of the a state, on the angle interval of the node at the given position"""
+    return pos + sensing_radius * np.array([np.cos(psi), np.sin(psi)])
 
 class CEDOPADSNode:
     """Models a node in the DTOPADS problem."""
@@ -57,29 +73,17 @@ class CEDOPADSNode:
         #print(phis, zetas)
         assert all(phi <= zeta for phi, zeta in zip(phis, zetas))
 
-        return CEDOPADSNode(node_id, pos, score, thetas, phis, zetas)
+        return CEDOPADSNode(node_id, pos, score, np.array(thetas), np.array(phis), np.array(zetas))
          
     def compute_score(self, psi: Angle, tau: Angle, eta: float) -> float:
         """Computes the score of the given node, given a heading angle psi."""
         for j, interval in enumerate(self.intervals):
             if interval.contains(psi):
-                # The difference between psi and theta measured in radians.
-                weight_from_psi = np.cos(compute_difference_between_angles(psi, self.thetas[j]) / self.zetas[j])
-                weight_from_tau = np.exp(- compute_difference_between_angles(tau, (psi + np.pi) % (2 * np.pi)) / eta)
-                #weight_from_tau = np.cos(eta * compute_difference_between_angles(tau, (psi + np.pi) % (2 * np.pi)))
+                #weight_from_psi = np.cos(compute_difference_between_angles(psi, self.thetas[j]) / self.zetas[j])
+                #weight_from_tau = np.exp(- compute_difference_between_angles(tau, (psi + np.pi) % (2 * np.pi)) / eta)
 
-                if weight_from_psi < 0 or weight_from_tau < 0:
-                    self.plot(1)
-                    q = self.get_state(1, psi, tau)
-                    q.plot()
-                    fov = AngleInterval(tau - eta / 2, tau + eta / 2)
-                    fov.plot(q.pos, 1, "tab:orange", 0.1)
-                    plt.show()
-                    print(f"psi and theta {compute_difference_between_angles(psi, self.thetas[j])}, tau and psi {compute_difference_between_angles(tau, (psi + np.pi) % (2 * np.pi))}")
-                    raise ValueError(f"one of the weights {weight_from_psi:.2f}, {weight_from_tau:.2f} is negative, psi: {psi:.2f}, theta: {self.thetas[j]:.2f}, phi: {self.phis[j]:.2f}, zeta: {self.zetas[j]:.2f}, tau: {tau:.2f}, eta: {eta:.2f}")
-
-                return self.score * weight_from_psi * weight_from_tau 
-            #np.cos((self.thetas[i] - psi) / self.zetas[i])
+                #return self.score * weight_from_psi * weight_from_tau
+                return _compute_score(self.score, self.thetas[j], self.zetas[j], psi, tau, eta) 
 
         return 0 
 
@@ -99,15 +103,9 @@ class CEDOPADSNode:
         for interval in self.intervals:
             interval.plot(self.pos, sensing_radius, color, 0.2)
 
-        # Added for debuging
-        #for theta in self.thetas:
-        #    offset = sensing_radius * np.array([np.cos(theta), np.sin(theta)])
-        #    plt.plot([self.pos[0], self.pos[0] - offset[0]], [self.pos[1], self.pos[1] - offset[1]], c = color)
-
     def get_state(self, sensing_radius: float, psi: Angle, tau: Angle) -> State:
-        """Computes the state corresponding to """
-        offset = sensing_radius * np.array([np.cos(psi), np.sin(psi)])
-        return State(self.pos + offset, tau)
+        """Computes the state corresponding to a given visit."""
+        return State(_compute_position(self.pos, sensing_radius, psi), tau)
                     
 @dataclass
 class CEDOPADSInstance:
@@ -191,7 +189,7 @@ class CEDOPADSInstance:
         plt.legend(handles=indicators, loc=1)
         plt.plot()
     
-    def plot_with_routes(self, routes: List[CEDOPADSRoute], sensing_radius: float, rho: float, colors: List[str] = ["tab:orange", "tab:green", "tab:red", "tab:blue", "tab:purple", "tab:cyan"], show: bool = False):
+    def plot_with_routes(self, routes: List[CEDOPADSRoute], sensing_radius: float, rho: float, eta: float, colors: List[str] = ["tab:orange", "tab:green", "tab:red", "tab:blue", "tab:purple", "tab:cyan"], show: bool = False):
         """Plots multiple CEDOPADS routes on top of the plot"""
         self.plot(sensing_radius, set())
 
@@ -215,7 +213,7 @@ class CEDOPADSInstance:
             final_path = compute_relaxed_dubins_path(q[-1], self.sink, rho)
             final_path.plot(q[-1], self.sink, color = color)
 
-        indicators = [mlines.Line2D([], [], color=color, label=f"Score: {round(self.compute_score_of_route(route), 2)}, Length: {round(self.compute_length_of_route(route, sensing_radius, rho), 2)}", marker="s") for color, route in zip(colors, routes)]
+        indicators = [mlines.Line2D([], [], color=color, label=f"Score: {self.compute_score_of_route(route, eta):.2f}, Length: {self.compute_length_of_route(route, sensing_radius, rho):.2f}", marker="s") for color, route in zip(colors, routes)]
         plt.legend(handles=indicators, loc=1)
         if show: 
             plt.plot()
@@ -243,15 +241,31 @@ class CEDOPADSInstance:
         """Computes the score of a CEDOPADS route."""
         # Check if we visit the same node more than once, in which case 
         # we discard the lowest score, in order to incentivise the algorithms to only visit the same node once.
-        if len(set(k for k, _ , _ in route)) < len(route):
-            scores = {}
-            for (k, psi, tau) in route:
-                if (score := self.nodes[k].compute_score(psi, tau, eta)) > scores.get(k, 0):
-                    scores[k] = score
-            
-            return sum(score for score in scores.values())
+        #if len(set(k for k, _ , _ in route)) < len(route):
+        #    scores = {}
+        #    for (k, psi, tau) in route:
+        #        if (score := self.nodes[k].compute_score(psi, tau, eta)) > scores.get(k, 0):
+        #            scores[k] = score
+        #    
+        #    return sum(score for score in scores.values())
         
         return sum([self.nodes[k].compute_score(psi, tau, eta) for (k, psi, tau) in route])
+
+    def compute_distance_between_state_and_visit(self, q: State, visit: Visit, sensing_radius: float, rho: float) -> float:
+        """Computes the distance between visit0 and visit1"""
+        (k, psi, tau) = visit
+        q_of_visit = self.nodes[k].get_state(sensing_radius, psi, tau)
+
+        return dubins.shortest_path(q.to_tuple(), q_of_visit.to_tuple(), rho).path_length()
+
+    def compute_score_of_visit(self, visit: Visit, eta: float) -> float:
+        """Computes the score of a visit."""
+        k, psi, tau = visit
+        return self.nodes[k].compute_score(psi, tau, eta)
+
+    def compute_scores_along_route(self, route: CEDOPADSRoute, eta: float) -> Dict[int, float]:
+        """Computes the scores along the route and returns them in a dictionary, with the indicies as keys."""
+        return {i: self.compute_score_of_visit(visit, eta) for i, visit in enumerate(route)}
 
     def is_route_feasable(self, route: CEDOPADSRoute, sensing_radius: float, rho: float, tmax: float) -> bool:
         """Checks if the route is feasable."""
@@ -287,5 +301,3 @@ if __name__ == "__main__":
     node.plot(1)
     plt.show()
     #node.compute_score(psi, 1.29, 1)
-
-# %%

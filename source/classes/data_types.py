@@ -6,8 +6,11 @@ from dataclasses import dataclass
 from typing import Tuple
 from matplotlib import pyplot as plt 
 from matplotlib import patches
+import numba as nb
 import random
 from scipy.stats import truncnorm
+from numba.experimental import jitclass
+from numba import double
 
 Position = ArrayLike
 Velocity = ArrayLike
@@ -15,6 +18,7 @@ Matrix = ArrayLike
 
 Angle = float
 
+@nb.njit()
 def compute_difference_between_angles(a: Angle, b: Angle) -> Angle:
     """Computes the difference in radians between a and b"""
     return np.arccos(np.cos(a) * np.cos(b) + np.sin(a) * np.sin(b))
@@ -25,11 +29,13 @@ def compute_difference_between_angles(a: Angle, b: Angle) -> Angle:
     #else:
     #    return np.abs(a + b - 2 * np.pi)
 
-@dataclass
 class State:
     """Models a state in SE(2), that is R^2 x [0, 2pi)"""
-    pos: Position
-    angle: Angle
+
+    def __init__ (self, pos: Position, angle: Angle):
+        """Initializes the state."""
+        self.pos = pos 
+        self.angle = angle
 
     def to_tuple(self) -> Tuple[float, float, float]:
         """Converts the state to a tuple."""
@@ -44,9 +50,14 @@ class State:
         plt.scatter(*self.pos, c=color)
         plt.quiver(*self.pos, np.cos(self.angle), np.sin(self.angle), color = color, width = 0.005)
 
-    def __repr__ (self) -> str:
-        return f"{(round(float(self.pos[0]), 2), round(float(self.pos[1]), 2), round(self.angle, 2))}"
+    # NOTE: Not supported with numba
+    #def __repr__ (self) -> str:
+    #    return f"{(round(float(self.pos[0]), 2), round(float(self.pos[1]), 2), round(self.angle, 2))}"
 
+#@jitclass([
+#    ("a", double),
+#    ("b", double)
+#])
 class AngleInterval:
 
     def __init__ (self, a: float, b: float):
@@ -90,25 +101,59 @@ class AngleInterval:
         
         # Either generate an angle above or below the x axis depending on the proporition of the 
         # propotion of the arc described by the angle interval being above / below the x axis.
-        elif random.choices([0, 1], weights = [self.b, 2 * np.pi - self.a], k = 1)[0] == 1:
-            return np.random.uniform(self.a, 2 * np.pi)
-        else:
+        elif np.random.uniform(0, 1) < self.b / (self.b + 2 * np.pi - self.a):
             return np.random.uniform(0, self.b)
-
-    def generate_truncated_normal_angle(self, mean: float, scale_modifier: float = 0.05) -> Angle:
-        """Generates a truncated normal angle, with a given mean."""
-        # NOTE: Please have a look at the following website https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.truncnorm.html#scipy.stats.truncnorm
-        # for documentation on the truncnorm.rvs method and its arguments.
-        if self.a < self.b:
-            scale = scale_modifier * (self.b - self.a) 
-            return truncnorm.rvs((self.a - mean) / scale, (self.b - mean)  / scale, loc = mean, scale = scale)
         else:
-            scale = scale_modifier * (2 * np.pi - self.b + self.a)
-            return truncnorm.rvs((self.a - mean)  / scale, (self.b + 2 * np.pi - mean) / scale, loc = mean, scale = scale) % (2 * np.pi)
+        #elif np.random.choice(2, size = 1, p = [self.b, 2 * np.pi - self.a]) == 1:
+            return np.random.uniform(self.a, 2 * np.pi)
+        #else:
+            #return np.random.uniform(0, self.b)
 
-    def __repr__ (self) -> str:
-        """Returns a string representation of the angle interval."""
-        return f"[{round(self.a, 3)}; {round(self.b, 3)}]"
+    def generate_scewed_uniform_angle(self, mean: float) -> Angle:
+        """Generates a scewed uniform angle."""
+        a, b = self.a, self.b
+        if not (a <= mean <= b):
+            raise ValueError("p must be within the interval [a, b].")
+ 
+        # Compute k based on alpha and interval size
+        k = 1 / (b - a)
+ 
+        # Sample u from the dynamic uniform range
+        u = np.random.uniform(a - mean, b - mean)
+ 
+        # Apply the skewing weight
+        weight = np.exp(k * abs(u) / (b - a))
+        # Calculate the new angle
+        mutation = u * (a - b) * weight
+        new_angle = mean + mutation
+ 
+        # Ensure the result stays within [a, b]
+        return new_angle % (2 * np.pi) 
+
+    def generate_triangular_angle(self, mean: float) -> Angle:
+        """Generates an angle from a triangular distribution"""
+        if self.a < self.b:
+            return np.random.triangular(self.a, mean , self.b)
+        elif self.a > self.b and mean >= self.a:
+            return np.random.triangular(self.a, mean, self.b + 2 * np.pi) % (2 * np.pi)
+        else:
+            return np.random.triangular(self.a, mean + 2 * np.pi, self.b + 2 * np.pi) % (2 * np.pi)
+
+#    def generate_truncated_normal_angle(self, mean: float, scale_modifier: float = 0.05) -> Angle:
+#        """Generates a truncated normal angle, with a given mean."""
+#        # NOTE: Please have a look at the following website https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.truncnorm.html#scipy.stats.truncnorm
+#        # for documentation on the truncnorm.rvs method and its arguments.
+#        if self.a < self.b:
+#            scale = scale_modifier * (self.b - self.a) 
+#            return truncnorm.rvs((self.a - mean) / scale, (self.b - mean)  / scale, loc = mean, scale = scale)
+#        else:
+#            scale = scale_modifier * (2 * np.pi - self.b + self.a)
+#            return truncnorm.rvs((self.a - mean)  / scale, (self.b + 2 * np.pi - mean) / scale, loc = mean, scale = scale) % (2 * np.pi)
+#
+    # NOTE: Not supported with numba
+    #def __repr__ (self) -> str:
+    #    """Returns a string representation of the angle interval."""
+        #return f"[{round(self.a, 3)}; {round(self.b, 3)}]"
 
     def constrain(self, psi: Angle) -> Angle:
         """Constrain psi to the angle interval."""
@@ -142,8 +187,8 @@ if __name__ == "__main__":
     #interval.plot((0,0), 1, "tab:orange", 0.2)
     
     for _ in range(100000):
-        angles.append(interval.generate_truncated_normal_angle(5.5))
-    plt.hist(angles, bins = 200)
+        angles.append(interval.generate_triangular_angle(5.5))
+    plt.hist(angles, bins = 30)
     plt.plot()
 
 # %%
