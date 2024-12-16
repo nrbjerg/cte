@@ -51,8 +51,8 @@ class State:
         plt.quiver(*self.pos, np.cos(self.angle), np.sin(self.angle), color = color, width = 0.005)
 
     # NOTE: Not supported with numba
-    #def __repr__ (self) -> str:
-    #    return f"{(round(float(self.pos[0]), 2), round(float(self.pos[1]), 2), round(self.angle, 2))}"
+    def __repr__ (self) -> str:
+        return f"{(round(float(self.pos[0]), 2), round(float(self.pos[1]), 2), round(self.angle, 2))}"
 
 #@jitclass([
 #    ("a", double),
@@ -139,21 +139,21 @@ class AngleInterval:
         else:
             return np.random.triangular(self.a, mean + 2 * np.pi, self.b + 2 * np.pi) % (2 * np.pi)
 
-#    def generate_truncated_normal_angle(self, mean: float, scale_modifier: float = 0.05) -> Angle:
-#        """Generates a truncated normal angle, with a given mean."""
-#        # NOTE: Please have a look at the following website https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.truncnorm.html#scipy.stats.truncnorm
-#        # for documentation on the truncnorm.rvs method and its arguments.
-#        if self.a < self.b:
-#            scale = scale_modifier * (self.b - self.a) 
-#            return truncnorm.rvs((self.a - mean) / scale, (self.b - mean)  / scale, loc = mean, scale = scale)
-#        else:
-#            scale = scale_modifier * (2 * np.pi - self.b + self.a)
-#            return truncnorm.rvs((self.a - mean)  / scale, (self.b + 2 * np.pi - mean) / scale, loc = mean, scale = scale) % (2 * np.pi)
+    def generate_truncated_normal_angle(self, mean: float, scale_modifier: float = 0.05) -> Angle:
+        """Generates a truncated normal angle, with a given mean."""
+        # NOTE: Please have a look at the following website https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.truncnorm.html#scipy.stats.truncnorm
+        # for documentation on the truncnorm.rvs method and its arguments.
+        if self.a < self.b:
+            scale = scale_modifier * (self.b - self.a) 
+            return truncnorm.rvs((self.a - mean) / scale, (self.b - mean)  / scale, loc = mean, scale = scale)
+        else:
+            scale = scale_modifier * (2 * np.pi - self.b + self.a)
+            return truncnorm.rvs((self.a - mean)  / scale, (self.b + 2 * np.pi - mean) / scale, loc = mean, scale = scale) % (2 * np.pi)
 #
     # NOTE: Not supported with numba
-    #def __repr__ (self) -> str:
-    #    """Returns a string representation of the angle interval."""
-        #return f"[{round(self.a, 3)}; {round(self.b, 3)}]"
+    def __repr__ (self) -> str:
+        """Returns a string representation of the angle interval."""
+        return f"[{round(self.a, 3)}; {round(self.b, 3)}]"
 
     def constrain(self, psi: Angle) -> Angle:
         """Constrain psi to the angle interval."""

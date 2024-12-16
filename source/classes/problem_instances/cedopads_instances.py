@@ -96,12 +96,12 @@ class CEDOPADSNode:
         # If there is no angle inteval which contains psi return none
         return None 
 
-    def plot(self, sensing_radius: float, color: str = "tab:gray") -> None:
+    def plot(self, sensing_radius: float, color: str = "tab:gray", alpha = 0.2) -> None:
         """Plots the point, and the angle cones."""
         plt.scatter(self.pos[0], self.pos[1], self.size, c = color)
         
         for interval in self.intervals:
-            interval.plot(self.pos, sensing_radius, color, 0.2)
+            interval.plot(self.pos, sensing_radius, color, alpha)
 
     def get_state(self, sensing_radius: float, psi: Angle, tau: Angle) -> State:
         """Computes the state corresponding to a given visit."""
@@ -150,7 +150,7 @@ class CEDOPADSInstance:
 
         # Plots targets
         for k in set(range(len(self.nodes))).difference(nodes_to_exculude):
-            self.nodes[k].plot(sensing_radius)
+            self.nodes[k].plot(sensing_radius, alpha = 0.1)
         
         if show:
             plt.gca().set_aspect("equal", adjustable="box")
@@ -187,7 +187,7 @@ class CEDOPADSInstance:
 
         indicators = [mlines.Line2D([], [], color=color, label=f"Score: {round(self.compute_score_of_route(route, eta), 2)}, Length: {round(self.compute_length_of_route(route, sensing_radius, rho), 2)}", marker="s")]
         plt.legend(handles=indicators, loc=1)
-        plt.plot()
+        #plt.plot()
     
     def plot_with_routes(self, routes: List[CEDOPADSRoute], sensing_radius: float, rho: float, eta: float, colors: List[str] = ["tab:orange", "tab:green", "tab:red", "tab:blue", "tab:purple", "tab:cyan"], show: bool = False):
         """Plots multiple CEDOPADS routes on top of the plot"""
@@ -227,15 +227,19 @@ class CEDOPADSInstance:
 
     def compute_length_of_route(self, route: CEDOPADSRoute, sensing_radius: float, rho: float) -> float:
         """Computes the length of the route, for the given sensing radius and turning radius rho."""
+        return sum(self.compute_lengths_of_route_segments(route, sensing_radius, rho))
+
+    def compute_lengths_of_route_segments(self, route: CEDOPADSRoute, sensing_radius: float, rho: float) -> List[float]:
+        """Computes the length of the route, for the given sensing radius and turning radius rho."""
         if len(route) == 0:
             return np.linalg.norm(self.source - self.sink)
 
         q = self.get_states(route, sensing_radius) 
         tups = [q[i].to_tuple() for i in range(len(q))]
 
-        return (compute_length_of_relaxed_dubins_path(q[0].angle_complement(), self.source, rho) + 
-                sum([dubins.shortest_path(tups[i], tups[i + 1], rho).path_length() for i in range(len(q) - 1)]) +
-                compute_length_of_relaxed_dubins_path(q[-1], self.sink, rho))
+        return ([compute_length_of_relaxed_dubins_path(q[0].angle_complement(), self.source, rho)] + 
+                [dubins.shortest_path(tups[i], tups[i + 1], rho).path_length() for i in range(len(q) - 1)] +
+                [compute_length_of_relaxed_dubins_path(q[-1], self.sink, rho)])
 
     def compute_score_of_route(self, route: CEDOPADSRoute, eta: float) -> float:
         """Computes the score of a CEDOPADS route."""
