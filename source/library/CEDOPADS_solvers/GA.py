@@ -121,7 +121,6 @@ class GA:
         else:
             return self.pick_new_visit_based_on_sdr(individual, individual[idx][0], individual[idx + 1][0])
 
-
     # ---------------------------------------- Fitness function ------------------------------------------ 
     def fitness_function(self, individual: CEDOPADSRoute, ratio_of_time_used: float) -> float:
         """Computes the fitness of the route, based on the ratio of time left."""
@@ -341,8 +340,8 @@ class GA:
                 # Perform a greedy choice of the next visit in the route based on the sdr score, 
                 # from the final state in the route to the next candidate state.
                 q = self.problem.nodes[child[0][0]].get_state(self.sensing_radius, child[0][1], child[0][2])
-                total_distance = compute_length_of_relaxed_dubins_path(q.angle_complement() , problem.source, self.rho)
-                while total_distance + compute_length_of_relaxed_dubins_path(q, problem.sink, self.rho) < t_max:
+                total_distance = compute_length_of_relaxed_dubins_path(q.angle_complement() , self.problem.source, self.rho)
+                while total_distance + compute_length_of_relaxed_dubins_path(q, self.problem.sink, self.rho) < self.t_max:
                     candidates = []
 
                     for i, (index, parent) in enumerate(zip(indicies, pool)):
@@ -494,7 +493,6 @@ class GA:
             
         return individual
 
-
     # --------------------------------------- Local Search Operators ------------------------------------ #    
     def wiggle_angles(self, individual: CEDOPADSRoute, q: float, scale_modifier: float = 0.02, scale_for_tau: float = 0.3) -> CEDOPADSRoute:
         """Wiggles the angles of the individual slightly, using truncated normal distributions."""
@@ -585,22 +583,27 @@ class GA:
         return [self.population[i] if i < self.mu else offspring[i - self.mu] for i in indicies_of_new_generation]
 
     def mu_comma_lambda_selection(self, offspring: List[CEDOPADSRoute], ratio_of_time_used: float) -> List[CEDOPADSRoute]:
-        """Picks the mu offspring with the highest fitnesses to populate the the next generation."""
+        """Picks the mu offspring with the highest fitnesses to populate the the next generation, note this is done with elitism."""
         fitnesses_of_offspring = np.array(list(map(lambda child: self.fitness_function(child, ratio_of_time_used), offspring)))
 
         # Calculate the indicies of the best performing memebers
         indicies_of_new_generation = np.argsort(fitnesses_of_offspring)[-self.mu:]
-        
-        # Simply set the new fitnesses which have been calculated recently.
-        self.fitnesses = fitnesses_of_offspring[indicies_of_new_generation]
 
-        return [offspring[i] for i in indicies_of_new_generation]
+        if fitnesses_of_offspring[indicies_of_new_generation[0]] < self.highest_fitness_recorded:
+            # Use elitism
+            self.fitnesses = fitnesses_of_offspring[indicies_of_new_generation[:-1]] + [self.highest_fitness_recorded]
+            return [offspring[i] for i in indicies_of_new_generation[:-1]] + [self.individual_with_highest_score]
+        else:
+            # Simply set the new fitnesses which have been calculated recently.
+            self.fitnesses = fitnesses_of_offspring[indicies_of_new_generation]
+            return [offspring[i] for i in indicies_of_new_generation]
 
     # -------------------------------------------- Main Loop of GA --------------------------------------- #
-    def run(self, time_budget: float, m: int, parent_selection_mechanism: Callable[[], List[CEDOPADSRoute]], crossover_mechanism: Callable[[List[CEDOPADSRoute]], List[CEDOPADSRoute]], survivor_selection_mechanism: Callable[[List[CEDOPADSRoute], float], ArrayLike], used_to_sweep: bool = False) -> CEDOPADSRoute:
+    def run(self, time_budget: float, m: int, parent_selection_mechanism: Callable[[], List[CEDOPADSRoute]], crossover_mechanism: Callable[[List[CEDOPADSRoute]], List[CEDOPADSRoute]], survivor_selection_mechanism: Callable[[List[CEDOPADSRoute], float], ArrayLike], p_c: float, progress_bar: bool = False) -> CEDOPADSRoute:
         """Runs the genetic algorithm for a prespecified time, given by the time_budget, using k-point crossover with m parrents."""
-        start_time = time.time()
+        assert p_c <= 1.0
 
+        start_time = time.time()
         # Generate an initial population, which almost satifies the distant constraint, ie. add nodes until
         # the sink cannot be reached within d - t_max units where d denotes the length of the route.
         self.population = []
@@ -621,19 +624,20 @@ class GA:
         cdf = np.add.accumulate(probabilities)
 
         gen = 0
-        best_route, highest_score = None, 0
+        best_route, self.highest_score = None, 0
         with tqdm(total=time_budget, desc="GA") as pbar:
             # Set initial progress bar information.
             idx_of_best_route = np.argmax(self.fitnesses)
 
-            avg_fitness = np.sum(self.fitnesses) / self.mu
-            avg_distance = sum(self.problem.compute_length_of_route(route, self.sensing_radius, self.rho) for route in self.population) / self.mu
-            avg_length = sum(len(route) for route in self.population) / self.mu
-            pbar.set_postfix({
-                    "Gen": gen,
-                    "Best": f"({self.fitnesses[idx_of_best_route]:.1f}, {self.problem.compute_length_of_route(self.population[idx_of_best_route], self.sensing_radius, self.rho):.1f}, {len(self.population[idx_of_best_route])})",
-                    "Aver": f"({avg_fitness:.1f}, {avg_distance:.1f}, {avg_length:.1f})"
-                })
+            if progress_bar:
+                avg_fitness = np.sum(self.fitnesses) / self.mu
+                avg_distance = sum(self.problem.compute_length_of_route(route, self.sensing_radius, self.rho) for route in self.population) / self.mu
+                avg_length = sum(len(route) for route in self.population) / self.mu
+                pbar.set_postfix({
+                        "Gen": gen,
+                        "Best": f"({self.fitnesses[idx_of_best_route]:.1f}, {self.problem.compute_length_of_route(self.population[idx_of_best_route], self.sensing_radius, self.rho):.1f}, {len(self.population[idx_of_best_route])})",
+                        "Aver": f"({avg_fitness:.1f}, {avg_distance:.1f}, {avg_length:.1f})"
+                    })
 
             while (elapsed_time := (time.time() - start_time)) < time_budget:
                 ratio_of_time_used = elapsed_time / time_budget
@@ -645,7 +649,7 @@ class GA:
                 scores = [[self.problem.nodes[k].compute_score(psi, tau, self.eta) for (k, psi, tau) in parent] for parent in self.population]
                 states = [[self.problem.nodes[k].get_state(self.sensing_radius, psi, tau) for (k, psi, tau) in parent] for parent in self.population]
                 offspring = []
-                for i in range(self.mu):
+                for i in range(self.mu * p_c):
                     parent_indicies = self.stochastic_universal_sampling(cdf, m = m)
                     
                     for child in crossover_mechanism([self.population[i] for i in parent_indicies], [scores[i] for i in parent_indicies], [states[i] for i in parent_indicies]): 
@@ -671,28 +675,29 @@ class GA:
                 probabilities = parent_selection_mechanism() 
                 cdf = np.add.accumulate(probabilities)
 
-                # Update the tqdm progress bar and add extra information regarding the genetic algorithm.
-                pbar.n = round(time.time() - start_time, 1)
 
                 idx_of_best_route = np.argmax(self.fitnesses)
-                if (problem.compute_length_of_route(self.population[idx_of_best_route], self.sensing_radius, self.rho) < t_max and
-                    self.fitnesses[idx_of_best_route] > highest_score):
+                if (self.problem.compute_length_of_route(self.population[idx_of_best_route], self.sensing_radius, self.rho) < self.t_max and
+                    self.fitnesses[idx_of_best_route] > self.highest_score):
                     best_route = self.population[idx_of_best_route]
-                    highest_score = self.fitnesses[idx_of_best_route]
+                    self.highest_score = self.fitnesses[idx_of_best_route]
 
-                avg_fitness = np.sum(self.fitnesses) / self.mu
-                avg_distance = sum(self.problem.compute_length_of_route(route, self.sensing_radius, self.rho) for route in self.population) / self.mu
-                avg_length = sum(len(route) for route in self.population) / self.mu
-                pbar.set_postfix({
-                        "Gen": gen,
-                        "Best": f"({self.fitnesses[idx_of_best_route]:.1f}, {self.problem.compute_length_of_route(self.population[idx_of_best_route], self.sensing_radius, self.rho):.1f}, {len(self.population[idx_of_best_route])})",
-                        "Aver": f"({avg_fitness:.1f}, {avg_distance:.1f}, {avg_length:.1f})"
-                })
+                # Update the tqdm progress bar and add extra information regarding the genetic algorithm.
+                pbar.n = round(time.time() - start_time, 1)
+                if progress_bar:
+                    avg_fitness = np.mean(self.fitnesses)
+                    avg_distance = sum(self.problem.compute_length_of_route(route, self.sensing_radius, self.rho) for route in self.population) / self.mu
+                    avg_length = sum(len(route) for route in self.population) / self.mu
+                    pbar.set_postfix({
+                            "Gen": gen,
+                            "Best": f"({self.fitnesses[idx_of_best_route]:.1f}, {self.problem.compute_length_of_route(self.population[idx_of_best_route], self.sensing_radius, self.rho):.1f}, {len(self.population[idx_of_best_route])})",
+                            "Aver": f"({avg_fitness:.1f}, {avg_distance:.1f}, {avg_length:.1f})"
+                    })
     
         # TODO: Finally try to fix routes which are to long before returning the best route
         permitable_routes = list(filter(lambda route: self.problem.compute_length_of_route(route, self.sensing_radius, self.rho) < self.t_max, self.population))
         best_permitable_route = max(permitable_routes, key = lambda route: self.problem.compute_score_of_route(route, self.eta))
-        if highest_score < problem.compute_score_of_route(best_permitable_route, self.eta):
+        if self.highest_score < self.problem.compute_score_of_route(best_permitable_route, self.eta):
             return best_permitable_route
         else:
             return best_route
