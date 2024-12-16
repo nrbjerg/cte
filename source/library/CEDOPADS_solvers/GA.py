@@ -122,201 +122,11 @@ class GA:
             return self.pick_new_visit_based_on_sdr(individual, individual[idx][0], individual[idx + 1][0])
 
     # ---------------------------------------- Fitness function ------------------------------------------ 
-    def fitness_function(self, individual: CEDOPADSRoute, ratio_of_time_used: float) -> float:
+    def fitness_function(self, individual: CEDOPADSRoute) -> float:
         """Computes the fitness of the route, based on the ratio of time left."""
-        # We wish to add a penalty to penalize routes which are to long
-        # and to make the penalty more and more suvere as time is running out.
-        length = self.problem.compute_length_of_route(individual, self.sensing_radius, self.rho)
-        length_penalty = 1 / (1 + np.exp(-max(ratio_of_time_used * (length - self.t_max), 0)))
-
-        score = self.problem.compute_score_of_route(individual, self.eta)
-        return 2 * (1 - length_penalty) * score 
+        return self.problem.compute_score_of_route(individual, eta) 
      
     # -------------------------------------- Recombination Operators -------------------------------------- #
-    def k_point_crossover(self, parents: List[CEDOPADSRoute], k: int = 4) -> List[CEDOPADSRoute]:
-        """Performs k-point crossover between the parents, and creates an offspring."""
-        assert k >= 2 and len(parents) >= 2
-
-        # Pick random inidices used to create the k-point crossovers, ie. each parent gets split at the 
-        # indicies and the subparts, gets rearanged back into a set of children, if this is not posible i.e.
-        # if the length of the parent is less than k, simply remove it from the pool, and if we dont have
-        # enough suffiicently long parents, we simply return an empty list.
-        parents = [parent for parent in parents if len(parent) >= k]
-        if len(parents) == 0:
-            return []
-        elif len(parents) == 1:
-            return parents
-        indicies = [sorted(np.random.choice(np.arange(0, len(parent)), size = k, replace = False))
-                    for parent in parents]
-        
-        # Generate all of the posible offspring from the given list of indicies for each parent.
-        offspring = []
-        for parent_indicies in combinations_with_replacement(range(len(parents)), k):
-            
-            # Generate the child which corresponds to the parent indicies
-            for jdx in parent_indicies:
-                parent = parents[jdx]
-                for idx in range(k):
-                    if idx == 0:
-                        child = parent[:indicies[jdx][0]]
-                    elif idx == k - 1:
-                        child.extend(parent[indicies[jdx][k - 2]:])
-                    else:
-                        child.extend(parent[indicies[jdx][idx]:indicies[jdx][idx + 1]])
-
-            # Remove dublicate visits to the same node, since these do not increase the collected score.
-            seen = set()
-            idx = 0
-            while idx < len(child):
-                if child[idx][0] in seen:
-                    child.pop(idx)
-                else:
-                    seen.add(child[idx][0])
-                    idx += 1
-            
-            offspring.append(child)
-
-        return offspring 
-
-    def samir_crossover(self, parents: List[CEDOPADSRoute], k: int = 2) -> List[CEDOPADSRoute]:
-        """Performs order crossover, by iteratively selecting two parents and producing their offspring."""
-        # Compute offspring for each pair of parents included in the parents list.
-        offspring = []
-        for pool in combinations(parents, k):
-            
-            for i, dominant_parent in enumerate(pool):
-                # Keep track of the current index in each of the parents.
-                indicies = {j: 0 if i != j else 1 for j in range(k)}
-                child = [dominant_parent[0]]
-
-                # Compute scores and distances.
-                distances, scores = {}, {}
-                for j, index in indicies.items():
-                    distances[j] = self.problem.compute_distance_between_visits(child[-1], pool[j][index], self.sensing_radius, self.rho)
-                    scores[j] = self.problem.compute_score_of_visit(pool[j][index], self.eta) 
-                
-                # Perform a greedy choice of the next visit in the route based on the sdr score, 
-                # from the final state in the route to the next candidate state.
-                while problem.compute_length_of_route(child, self.sensing_radius, self.rho) < t_max:
-                    sdr_scores_of_visits = [scores[j] / distances[j] for j in range(k)]
-
-                    # Chose the next visit greedily, but make sure that we dont pick a node which
-                    # has already been visited. TODO
-                    greedy_idx = np.argmax(sdr_scores_of_visits)
-                    child.append(pool[greedy_idx][indicies[greedy_idx]])
-
-                    # Move the pointer for the chosen route one step ahead, and update the scores and distances accordingly.
-                    indicies[greedy_idx] += 1
-                    if indicies[greedy_idx] >= len(pool[greedy_idx]):
-                        # Simply pick a new random node for the 
-                        pool[greedy_idx].append(self.pick_new_visit(pool[greedy_idx]))
-
-                    scores[greedy_idx] = self.problem.compute_score_of_visit(pool[greedy_idx][indicies[greedy_idx]], self.eta)
-
-                    for j, index in indicies.items():
-                        distances[j] = self.problem.compute_distance_between_visits(child[-1], pool[j][indicies[j]], self.sensing_radius, self.rho)
-
-                    offspring.append(child[:-1])
-
-        return offspring
-
-    def single_index_greedy_crossover(self, parents: List[CEDOPADSRoute], k: int = 2) -> List[CEDOPADSRoute]:
-        """Performs order crossover, by iteratively selecting two parents and producing their offspring."""
-        # Compute offspring for each pair of parents included in the parents list.
-        offspring = []
-        for pool in combinations(parents, k):
-            
-            for i, dominant_parent in enumerate(pool):
-                # Keep track of the current index in each of the parents.
-                child = [dominant_parent[0]]
-                index = 1
-                seen = set() 
-
-                # Perform a greedy choice of the next visit in the route based on the sdr score, 
-                # from the final state in the route to the next candidate state.
-                while self.problem.compute_length_of_route(child, self.sensing_radius, self.rho) < self.t_max:
-                    q = self.problem.nodes[child[-1][0]].get_state(self.sensing_radius, child[-1][1], child[-1][2])
-                    sdr_of_visits = []
-                    for parent in pool:
-                        # Make sure that every route in the pool has an appropriate length and that we have not already visited the greedily chosen node.
-                        if index >= len(parent):
-                            parent.append(self.pick_new_visit(child))
-                        elif parent[index][0] in seen:
-                            parent[index] = self.pick_new_visit(child)
-                        
-                        score = self.problem.compute_score_of_visit(parent[index], self.eta) 
-                        distance = self.problem.compute_distance_between_state_and_visit(q, parent[index], self.sensing_radius, self.rho) 
-                        sdr_of_visits.append(score / distance)
-
-
-                    # Chose the next visit greedily, based on the sdr score.
-                    i = np.argmax(sdr_of_visits)
-                    child.append(pool[i][index])
-                    seen.add(pool[i][index][0])
-                    index += 1
-
-                offspring.append(child[:-1])
-
-    def multi_index_greedy_crossover_with_arbitrary_starting_point(self, parents: List[CEDOPADSRoute], scores: List[List[float]], states: List[List[State]], k: int = 2, n: int = 2) -> List[CEDOPADSRoute]:
-        """Performs order crossover, by iteratively selecting two parents and producing their offspring."""
-        # Compute offspring for each pair of parents included in the parents list.
-        offspring = []
-
-        number_of_candidates = k * n
-        # NOTE: these repeatedly gets overwritten each time a new greedy choice is made.
-        sdr_of_visits = np.zeros(number_of_candidates)
-        distances = np.zeros(number_of_candidates)
-
-        for indicies in combinations(range(len(parents)), k):
-            pool = [parents[index] for index in indicies]
-            
-            for dominant_parent in pool:
-                # Keep track of the current index in each of the parents.
-                child = [dominant_parent[0]]
-                pointer = 1
-                seen = np.zeros(len(self.problem.nodes))
-                seen[child[0][0]] = 1
-
-                # Perform a greedy choice of the next visit in the route based on the sdr score, 
-                # from the final state in the route to the next candidate state.
-                q = self.problem.nodes[child[-1][0]].get_state(self.sensing_radius, child[-1][1], child[-1][2])
-                total_distance = compute_length_of_relaxed_dubins_path(q.angle_complement() , self.problem.source, self.rho)
-                while total_distance + compute_length_of_relaxed_dubins_path(q, self.problem.sink, self.rho) < t_max:
-                    candidates = []
-
-                    for i, (index, parent) in enumerate(zip(indicies, pool)):
-                        # Make sure that every route in the pool has an appropriate length and that we have not already visited the greedily chosen node.
-                        for j, l in enumerate(range(pointer, pointer + n)):
-                            if l >= len(parent) or seen[parent[l][0]] == 1: # TODO: Maybe this can chosen better using the sdr tensor.
-                                new_visit = self.pick_new_visit(child)
-                                distances[i * n + j] = self.problem.compute_distance_between_state_and_visit(q, new_visit, self.sensing_radius, self.rho) 
-                                sdr_of_visits[i* n + j] = self.problem.compute_score_of_visit(new_visit, self.eta) / distances[i* n + j]
-                                candidates.append(new_visit)
-
-                            else:
-                                candidates.append(parent[l])
-                                distances[i * n + j] = dubins.shortest_path(q.to_tuple(), states[index][l].to_tuple(), self.rho).path_length()
-                                sdr_of_visits[i * n + j] = scores[index][l] / distances[i * n + j]
-                    
-                    # Chose the next visit greedily, based on the sdr score.
-                    # NOTE: Argmax seems to work alot better than chosing the next with a random probability,
-                    # however this can be tested using c, since a higher c yields results more like if we had 
-                    # used argmax to choose i.
-
-                    probs = sdr_of_visits  / np.sum(sdr_of_visits)
-                    i = np.random.choice(number_of_candidates, p = probs) 
-
-                    #i = np.argmax(sdr_of_visits) 
-                    child.append(candidates[i])
-                    total_distance += distances[i]
-                    seen[child[-1][0]] = 1
-                    q = self.problem.nodes[child[-1][0]].get_state(self.sensing_radius, child[-1][1], child[-1][2])
-                    pointer += 1
-
-                offspring.append(child[:-1])
-
-        return offspring
-
     def multi_index_greedy_crossover(self, parents: List[CEDOPADSRoute], scores: List[List[float]], states: List[List[State]], k: int = 2, n: int = 2) -> List[CEDOPADSRoute]:
         """Performs order crossover, by iteratively selecting two parents and producing their offspring."""
         # Compute offspring for each pair of parents included in the parents list.
@@ -551,28 +361,11 @@ class GA:
 
         return indicies
 
-    def roulette_wheel (self, cdf: ArrayLike, m: int) -> List[int]:
-        """Implements roulette wheel sampling, to sample the indicies of m parents from the population."""
-        indicies = []
-
-        # Basically we just sample the population according to the probabilities given indirectly by the CDF
-        # which corresponds to spinning m roulette wheels where the lengths of each segment is proportional to
-        # the probability of picking each of the individuals of the population.
-        for _ in range(m):
-            r = np.random.uniform(0, 1)
-            i = 0
-            while r <= cdf[i] or i == self.mu - 1:
-                i += 1
-            
-            indicies.append(i - 1)
-            
-        return indicies
-
     # ----------------------------------------- Survivor Selection -------------------------------------- #
-    def mu_plus_lambda_selection(self, offspring: List[CEDOPADSRoute], ratio_of_time_used: float) -> List[CEDOPADSRoute]:
+    def mu_plus_lambda_selection(self, offspring: List[CEDOPADSRoute]) -> List[CEDOPADSRoute]:
         """Merges the newly generated offspring with the generation and selects the best mu individuals to survive until the next generation."""
         # NOTE: Recall that the fitness is time dependent hence we need to recalculate it for the parents.
-        fitnesses_of_parents_and_offspring = np.array(list(map(lambda child: self.fitness_function(child, ratio_of_time_used), self.population + offspring)))
+        fitnesses_of_parents_and_offspring = np.array(list(map(lambda child: self.fitness_function(child), self.population + offspring)))
 
         # Calculate the indicies of the best performing memebers
         indicies_of_new_generation = np.argsort(fitnesses_of_parents_and_offspring)[-self.mu:]
@@ -584,15 +377,16 @@ class GA:
 
     def mu_comma_lambda_selection(self, offspring: List[CEDOPADSRoute], ratio_of_time_used: float) -> List[CEDOPADSRoute]:
         """Picks the mu offspring with the highest fitnesses to populate the the next generation, note this is done with elitism."""
-        fitnesses_of_offspring = np.array(list(map(lambda child: self.fitness_function(child, ratio_of_time_used), offspring)))
+        fitnesses_of_offspring = np.array(list(map(lambda child: self.fitness_function(child), offspring)))
 
         # Calculate the indicies of the best performing memebers
         indicies_of_new_generation = np.argsort(fitnesses_of_offspring)[-self.mu:]
 
         if fitnesses_of_offspring[indicies_of_new_generation[0]] < self.highest_fitness_recorded:
             # Use elitism
-            self.fitnesses = fitnesses_of_offspring[indicies_of_new_generation[:-1]] + [self.highest_fitness_recorded]
-            return [offspring[i] for i in indicies_of_new_generation[:-1]] + [self.individual_with_highest_score]
+            self.fitnesses = np.append(fitnesses_of_offspring[indicies_of_new_generation[:-1]], [self.highest_fitness_recorded], axis = 0)
+            return [offspring[i] for i in indicies_of_new_generation[:-1]] + [self.individual_with_highest_recorded_fitness]
+
         else:
             # Simply set the new fitnesses which have been calculated recently.
             self.fitnesses = fitnesses_of_offspring[indicies_of_new_generation]
@@ -617,27 +411,82 @@ class GA:
         # Compute fitnesses of each route in the population and associated probabilities using 
         # the parent_selection_mechanism passed to the method, which sould be one of the parent
         # selection methods defined earlier in the class declaration.
-        self.fitnesses = [self.fitness_function(individual, 0) for individual in self.population]
+        self.fitnesses = [self.fitness_function(individual) for individual in self.population]
 
         # NOTE: The fitnesses are set as a field of the class so they are accessable within the method
         probabilities = parent_selection_mechanism() 
         cdf = np.add.accumulate(probabilities)
 
         gen = 0
-        best_route, self.highest_score = None, 0
-        with tqdm(total=time_budget, desc="GA") as pbar:
-            # Set initial progress bar information.
-            idx_of_best_route = np.argmax(self.fitnesses)
+        self.individual_with_highest_recorded_fitness, self.highest_fitness_recorded = None, 0
+        if progress_bar:
+            with tqdm(total=time_budget, desc="GA", disable = not progress_bar) as pbar:
+                # Set initial progress bar information.
+                idx_of_individual_with_highest_fitness = np.argmax(self.fitnesses)
 
-            if progress_bar:
                 avg_fitness = np.sum(self.fitnesses) / self.mu
                 avg_distance = sum(self.problem.compute_length_of_route(route, self.sensing_radius, self.rho) for route in self.population) / self.mu
                 avg_length = sum(len(route) for route in self.population) / self.mu
                 pbar.set_postfix({
                         "Gen": gen,
-                        "Best": f"({self.fitnesses[idx_of_best_route]:.1f}, {self.problem.compute_length_of_route(self.population[idx_of_best_route], self.sensing_radius, self.rho):.1f}, {len(self.population[idx_of_best_route])})",
+                        "Best": f"({self.fitnesses[idx_of_individual_with_highest_fitness]:.1f}, {self.problem.compute_length_of_route(self.population[idx_of_individual_with_highest_fitness], self.sensing_radius, self.rho):.1f}, {len(self.population[idx_of_individual_with_highest_fitness])})",
                         "Aver": f"({avg_fitness:.1f}, {avg_distance:.1f}, {avg_length:.1f})"
                     })
+
+                while (elapsed_time := (time.time() - start_time)) < time_budget:
+                    ratio_of_time_used = elapsed_time / time_budget
+
+                    # Generate new offspring using parent selection based on the computed fitnesses, to select m parents
+                    # and perform k-point crossover using these parents, to create a total of m^k children which is
+                    # subsequently mutated according to the mutation_probability, this also allows the "jiggeling" of 
+                    # the angles in order to find new versions of the parents with higher fitness values.
+                    scores = [[self.problem.nodes[k].compute_score(psi, tau, self.eta) for (k, psi, tau) in parent] for parent in self.population]
+                    states = [[self.problem.nodes[k].get_state(self.sensing_radius, psi, tau) for (k, psi, tau) in parent] for parent in self.population]
+                    offspring = []
+                    for i in range(int(np.ceil(self.mu * p_c))):
+                        parent_indicies = self.stochastic_universal_sampling(cdf, m = m)
+
+                        for child in crossover_mechanism([self.population[i] for i in parent_indicies], [scores[i] for i in parent_indicies], [states[i] for i in parent_indicies]): 
+                            mutated_child = self.mutate(child, p_s = 0.2, p_i = 0.3, p_r = 0.2, q = 0.1)
+
+                            # TODO: implement a local search improvement operator, ie. convert
+                            # the algorithm to a Lamarckian memetatic algortihm
+
+                            offspring.append(mutated_child) 
+                            #offspring.append(child)
+
+                        # NOTE: we are simply interested in optimizing the existing angles within the individual,
+                        # hence we create a new offspring where a few of the angles are different compared to 
+                        # the original individual, sort of like a Lamarckian mematic algortihm, however
+                        # here the local search is done using a stochastic operator.
+                        offspring.append(self.fix_length(self.wiggle_angles(deepcopy(self.population[i]), q = np.power(ratio_of_time_used, 2) * 0.2)))
+
+                    # Replace the worst performing individuals based on their fitness values, 
+                    # however do it softly so that the population increases over time
+                    # Survivor selection mechanism (Replacement)
+                    gen += 1
+                    self.population = survivor_selection_mechanism(offspring, ratio_of_time_used)
+                    probabilities = parent_selection_mechanism() 
+                    cdf = np.add.accumulate(probabilities)
+
+                    idx_of_individual_with_highest_fitness = np.argmax(self.fitnesses)
+                    if self.fitnesses[idx_of_individual_with_highest_fitness] > self.highest_fitness_recorded:
+                        self.individual_with_highest_recorded_fitness = self.population[idx_of_individual_with_highest_fitness]
+                        self.highest_fitness_recorded = self.fitnesses[idx_of_individual_with_highest_fitness]
+
+                    # Update the tqdm progress bar and add extra information regarding the genetic algorithm.
+                    pbar.n = round(time.time() - start_time, 1)
+                    avg_fitness = np.mean(self.fitnesses)
+                    avg_distance = sum(self.problem.compute_length_of_route(route, self.sensing_radius, self.rho) for route in self.population) / self.mu
+                    avg_length = sum(len(route) for route in self.population) / self.mu
+                    pbar.set_postfix({
+                            "Gen": gen,
+                            "Best": f"({self.fitnesses[idx_of_individual_with_highest_fitness]:.1f}, {self.problem.compute_length_of_route(self.population[idx_of_individual_with_highest_fitness], self.sensing_radius, self.rho):.1f}, {len(self.population[idx_of_individual_with_highest_fitness])})",
+                            "Aver": f"({avg_fitness:.1f}, {avg_distance:.1f}, {avg_length:.1f})"
+                    })
+        else:
+            # Set initial progress bar information.
+            idx_of_individual_with_highest_fitness = np.argmax(self.fitnesses)
 
             while (elapsed_time := (time.time() - start_time)) < time_budget:
                 ratio_of_time_used = elapsed_time / time_budget
@@ -649,18 +498,18 @@ class GA:
                 scores = [[self.problem.nodes[k].compute_score(psi, tau, self.eta) for (k, psi, tau) in parent] for parent in self.population]
                 states = [[self.problem.nodes[k].get_state(self.sensing_radius, psi, tau) for (k, psi, tau) in parent] for parent in self.population]
                 offspring = []
-                for i in range(self.mu * p_c):
+                for i in range(int(np.ceil(self.mu * p_c))):
                     parent_indicies = self.stochastic_universal_sampling(cdf, m = m)
-                    
+
                     for child in crossover_mechanism([self.population[i] for i in parent_indicies], [scores[i] for i in parent_indicies], [states[i] for i in parent_indicies]): 
                         mutated_child = self.mutate(child, p_s = 0.2, p_i = 0.3, p_r = 0.2, q = 0.1)
-                        
+
                         # TODO: implement a local search improvement operator, ie. convert
                         # the algorithm to a Lamarckian memetatic algortihm
 
                         offspring.append(mutated_child) 
                         #offspring.append(child)
-                    
+
                     # NOTE: we are simply interested in optimizing the existing angles within the individual,
                     # hence we create a new offspring where a few of the angles are different compared to 
                     # the original individual, sort of like a Lamarckian mematic algortihm, however
@@ -675,32 +524,12 @@ class GA:
                 probabilities = parent_selection_mechanism() 
                 cdf = np.add.accumulate(probabilities)
 
+                idx_of_individual_with_highest_fitness = np.argmax(self.fitnesses)
+                if self.fitnesses[idx_of_individual_with_highest_fitness] > self.highest_fitness_recorded:
+                    self.individual_with_highest_recorded_fitness = self.population[idx_of_individual_with_highest_fitness]
+                    self.highest_fitness_recorded = self.fitnesses[idx_of_individual_with_highest_fitness]
 
-                idx_of_best_route = np.argmax(self.fitnesses)
-                if (self.problem.compute_length_of_route(self.population[idx_of_best_route], self.sensing_radius, self.rho) < self.t_max and
-                    self.fitnesses[idx_of_best_route] > self.highest_score):
-                    best_route = self.population[idx_of_best_route]
-                    self.highest_score = self.fitnesses[idx_of_best_route]
-
-                # Update the tqdm progress bar and add extra information regarding the genetic algorithm.
-                pbar.n = round(time.time() - start_time, 1)
-                if progress_bar:
-                    avg_fitness = np.mean(self.fitnesses)
-                    avg_distance = sum(self.problem.compute_length_of_route(route, self.sensing_radius, self.rho) for route in self.population) / self.mu
-                    avg_length = sum(len(route) for route in self.population) / self.mu
-                    pbar.set_postfix({
-                            "Gen": gen,
-                            "Best": f"({self.fitnesses[idx_of_best_route]:.1f}, {self.problem.compute_length_of_route(self.population[idx_of_best_route], self.sensing_radius, self.rho):.1f}, {len(self.population[idx_of_best_route])})",
-                            "Aver": f"({avg_fitness:.1f}, {avg_distance:.1f}, {avg_length:.1f})"
-                    })
-    
-        # TODO: Finally try to fix routes which are to long before returning the best route
-        permitable_routes = list(filter(lambda route: self.problem.compute_length_of_route(route, self.sensing_radius, self.rho) < self.t_max, self.population))
-        best_permitable_route = max(permitable_routes, key = lambda route: self.problem.compute_score_of_route(route, self.eta))
-        if self.highest_score < self.problem.compute_score_of_route(best_permitable_route, self.eta):
-            return best_permitable_route
-        else:
-            return best_route
+        return self.individual_with_highest_recorded_fitness
 
     # ------------------------------------------------ MISC --------------------------------------------- #
     def __repr__(self) -> str:
@@ -716,6 +545,6 @@ if __name__ == "__main__":
     ga = GA(problem, t_max, eta, rho, sensing_radius, mu = 2048)
     print(ga)
     #cProfile.run("ga.run(60, 3, ga.sigma_scaling, ga.multi_index_greedy_crossover, ga.mu_comma_lambda_selection)", sort = "cumtime")
-    route = ga.run(300, 2, ga.sigma_scaling, ga.multi_index_greedy_crossover, ga.mu_comma_lambda_selection)
+    route = ga.run(300, 4, ga.sigma_scaling, ga.multi_index_greedy_crossover, ga.mu_comma_lambda_selection, p_c = 1.0, progress_bar = True)
     problem.plot_with_route(route, sensing_radius, rho, eta)
     plt.show()
