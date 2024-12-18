@@ -21,6 +21,9 @@ Angle = float
 @nb.njit()
 def compute_difference_between_angles(a: Angle, b: Angle) -> Angle:
     """Computes the difference in radians between a and b"""
+    if a == b:
+        return 0
+
     return np.arccos(np.cos(a) * np.cos(b) + np.sin(a) * np.sin(b))
     #a %= 2 * np.pi
     #b %= 2 * np.pi
