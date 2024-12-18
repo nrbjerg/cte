@@ -51,25 +51,19 @@ class GA:
     sensing_radius: float
     mu: int # The number of individuals in each generation
 
-    def __init__ (self, problem: CEDOPADSInstance, t_max, eta, rho, sensing_radius: float, mu: int = 256, seed: Optional[int] = None):
+    def __init__ (self, problem: CEDOPADSInstance, t_max, eta, rho, sensing_radius: float, mu: int = 256, lmbda: int = 256 * 7, seed: Optional[int] = None):
         """Initializes the genetic algorithm including initializing the population."""
         self.problem = problem
         self.t_max = t_max
         self.eta = eta
         self.rho = rho
         self.sensing_radius = sensing_radius
+        self.lmbda = lmbda
         self.mu = mu
         self.number_of_nodes = len(self.problem.nodes)
         self.node_indicies = set(range(self.number_of_nodes))
         self.node_indicies_arrray = np.array(range(self.number_of_nodes))
         
-        # Compute distances which will be used to guide the mutation operator
-        positions = np.concat((np.array([node.pos for node in problem.nodes]), problem.source.reshape(1, 2), problem.sink.reshape(1, 2)))
-        self.sdr_tensor = compute_sdr_tensor(positions, np.array([node.score for node in problem.nodes]), c_s = 2.0, c_d = 2.0)
-        self.sdrs_for_overwrite = np.empty_like(self.sdr_tensor[0][0]) 
-        self.default_mask = np.ones(self.number_of_nodes, dtype=bool)
-        self.mask_for_overwrite = np.empty_like(self.default_mask)
-
         # Seed RNG for repeatability
         if seed is None:
             hash_of_id = hashlib.sha1(problem.problem_id.encode("utf-8")).hexdigest()[:8]
@@ -127,8 +121,8 @@ class GA:
         return self.problem.compute_score_of_route(individual, eta) 
      
     # -------------------------------------- Recombination Operators -------------------------------------- #
-    def multi_index_greedy_crossover(self, parents: List[CEDOPADSRoute], scores: List[List[float]], states: List[List[State]], k: int = 2, n: int = 2) -> List[CEDOPADSRoute]:
-        """Performs order crossover, by iteratively selecting two parents and producing their offspring."""
+    def unidirectional_greedy_crossover(self, parents: List[CEDOPADSRoute], scores: List[List[float]], states: List[List[State]], k: int = 2, n: int = 2) -> List[CEDOPADSRoute]:
+        """Performs a unidirectional crossover, by iteratively selecting two parents and producing their offspring, in a greedy fashion starting from the source."""
         # Compute offspring for each pair of parents included in the parents list.
         offspring = []
 
@@ -158,6 +152,7 @@ class GA:
                         # Make sure that every route in the pool has an appropriate length and that we have  already visited the greedily chosen node.
                         for j, l in enumerate(range(pointer, pointer + n)):
                             if l >= len(parent) or seen[parent[l][0]] == 1:
+                                #new_visit = self.pick_new_visit_based_on_sdr_and_index(child, len(child) - 1)
                                 new_visit = self.pick_new_visit(child)
                                 distances[i * n + j] = self.problem.compute_distance_between_state_and_visit(q, new_visit, self.sensing_radius, self.rho) 
                                 sdr_of_visits[i * n + j] = self.problem.compute_score_of_visit(new_visit, self.eta) / distances[i * n + j]
@@ -172,20 +167,20 @@ class GA:
                     # NOTE: Argmax seems to work alot better than chosing the next with a random probability,
                     # however this can be tested using c, since a higher c yields results more like if we had 
                     # used argmax to choose i.
-                    probs = sdr_of_visits / np.sum(sdr_of_visits)
-                    if np.isnan(probs).any(): 
-                        # There has been some sort of error in the calculations and we have 
-                        # no choice but to chose a random candidate, uniformly.
-                        i = np.random.choice(number_of_candidates)
+                    #probs = sdr_of_visits / np.sum(sdr_of_visits)
+                    #if np.isnan(probs).any(): 
+                    #    # There has been some sort of error in the calculations and we have 
+                    #    # no choice but to chose a random candidate, uniformly.
+                    #    i = np.random.choice(number_of_candidates)
 
-                    else:
-                        i = np.random.choice(number_of_candidates, p = probs) 
+                    #else:
+                    #    i = np.random.choice(number_of_candidates, p = probs) 
                     
 
+                    i = np.argmax(sdr_of_visits) 
                     total_distance += distances[i]
                     child.append(candidates[i])
 
-                    #i = np.argmax(sdr_of_visits) 
                     seen[child[-1][0]] = 1
                     q = self.problem.nodes[child[-1][0]].get_state(self.sensing_radius, child[-1][1], child[-1][2])
                     pointer += 1
@@ -194,7 +189,7 @@ class GA:
 
         return offspring
 
-    #--------------------------------------------- Mutation Operators -------------------------------------- #
+    #--------------------------------------------- Mutation Operators -------------------------------------- 
     def mutate(self, individual: CEDOPADSRoute, p_s: float, p_i: float, p_r: float, q: float) -> CEDOPADSRoute: 
         """Copies and mutates the copy of the individual, based on the time remaining biasing the removal of visits if the route is to long, and otherwise adding / replacing visits within the route."""
         # Replace visists along the route.
@@ -210,12 +205,12 @@ class GA:
                 # note that self.number_of_nodes and self.number_of_nodes + 1, coresponds
                 # to the source and sink nodes respectively, when passed as arguments in the
                 # pick_new_visit_based_on_distance method.
-                individual.insert(i, self.pick_new_visit_based_on_sdr_and_index(individual, i))
+                individual.insert(i, self.pick_new_visit_based_on_sdr_and_index(individual, i)) 
                 i += 2
             else:
                 i += 1
 
-        while np.random.uniform(0, 1) < p_s and len(individual) >= 2: 
+        if np.random.uniform(0, 1) < p_s and len(individual) >= 2: 
             # Swap two random visists along the route described by the individual.
             indicies = np.random.choice(len(individual), size = 2, replace = False)
             individual[indicies[0]], individual[indicies[1]] = individual[indicies[1]], individual[indicies[0]]
@@ -375,7 +370,7 @@ class GA:
 
         return [self.population[i] if i < self.mu else offspring[i - self.mu] for i in indicies_of_new_generation]
 
-    def mu_comma_lambda_selection(self, offspring: List[CEDOPADSRoute], ratio_of_time_used: float) -> List[CEDOPADSRoute]:
+    def mu_comma_lambda_selection(self, offspring: List[CEDOPADSRoute]) -> List[CEDOPADSRoute]:
         """Picks the mu offspring with the highest fitnesses to populate the the next generation, note this is done with elitism."""
         fitnesses_of_offspring = np.array(list(map(lambda child: self.fitness_function(child), offspring)))
 
@@ -407,6 +402,13 @@ class GA:
                 route.append(self.pick_new_visit(route))
 
             self.population.append(route[:-1])
+
+        # Compute distances which will be used to guide the mutation operator
+        positions = np.concat((np.array([node.pos for node in problem.nodes]), problem.source.reshape(1, 2), problem.sink.reshape(1, 2)))
+        self.sdr_tensor = compute_sdr_tensor(positions, np.array([node.score for node in problem.nodes]), c_s = 2, c_d = 2)
+        self.sdrs_for_overwrite = np.empty_like(self.sdr_tensor[0][0]) 
+        self.default_mask = np.ones(self.number_of_nodes, dtype=bool)
+        self.mask_for_overwrite = np.empty_like(self.default_mask)
 
         # Compute fitnesses of each route in the population and associated probabilities using 
         # the parent_selection_mechanism passed to the method, which sould be one of the parent
@@ -443,11 +445,13 @@ class GA:
                     scores = [[self.problem.nodes[k].compute_score(psi, tau, self.eta) for (k, psi, tau) in parent] for parent in self.population]
                     states = [[self.problem.nodes[k].get_state(self.sensing_radius, psi, tau) for (k, psi, tau) in parent] for parent in self.population]
                     offspring = []
-                    for i in range(int(np.ceil(self.mu * p_c))):
+                    while len(offspring) < self.lmbda:
                         parent_indicies = self.stochastic_universal_sampling(cdf, m = m)
 
                         for child in crossover_mechanism([self.population[i] for i in parent_indicies], [scores[i] for i in parent_indicies], [states[i] for i in parent_indicies]): 
-                            mutated_child = self.mutate(child, p_s = 0.2, p_i = 0.3, p_r = 0.2, q = 0.1)
+                            if np.random.uniform(0, 1) < 0.2:
+                                offspring.append(deepcopy(child))
+                            mutated_child = self.mutate(child, p_s = 0.1, p_i = 0.3, p_r = 0.2, q = 0.1)
 
                             # TODO: implement a local search improvement operator, ie. convert
                             # the algorithm to a Lamarckian memetatic algortihm
@@ -459,13 +463,15 @@ class GA:
                         # hence we create a new offspring where a few of the angles are different compared to 
                         # the original individual, sort of like a Lamarckian mematic algortihm, however
                         # here the local search is done using a stochastic operator.
-                        offspring.append(self.fix_length(self.wiggle_angles(deepcopy(self.population[i]), q = np.power(ratio_of_time_used, 2) * 0.2)))
+                        #offspring.append(self.fix_length(self.wiggle_angles(deepcopy(self.population[i]), q = 0.05)))
+                        index_of_individual_to_be_wiggled = parent_indicies[np.random.choice(len(parent_indicies))]
+                        offspring.append(self.fix_length(self.wiggle_angles(deepcopy(self.population[index_of_individual_to_be_wiggled]), q = 0.05)))
 
                     # Replace the worst performing individuals based on their fitness values, 
                     # however do it softly so that the population increases over time
                     # Survivor selection mechanism (Replacement)
                     gen += 1
-                    self.population = survivor_selection_mechanism(offspring, ratio_of_time_used)
+                    self.population = survivor_selection_mechanism(offspring)
                     probabilities = parent_selection_mechanism() 
                     cdf = np.add.accumulate(probabilities)
 
@@ -498,29 +504,34 @@ class GA:
                 scores = [[self.problem.nodes[k].compute_score(psi, tau, self.eta) for (k, psi, tau) in parent] for parent in self.population]
                 states = [[self.problem.nodes[k].get_state(self.sensing_radius, psi, tau) for (k, psi, tau) in parent] for parent in self.population]
                 offspring = []
-                for i in range(int(np.ceil(self.mu * p_c))):
+                while len(offspring) < self.lmbda:
+                #for i in range(int(np.ceil(self.mu * p_c))):
                     parent_indicies = self.stochastic_universal_sampling(cdf, m = m)
 
                     for child in crossover_mechanism([self.population[i] for i in parent_indicies], [scores[i] for i in parent_indicies], [states[i] for i in parent_indicies]): 
-                        mutated_child = self.mutate(child, p_s = 0.2, p_i = 0.3, p_r = 0.2, q = 0.1)
+                        mutated_child = self.mutate(child, p_s = 0.2, p_i = 0.3, p_r = 0.2, q = 0.05)
 
                         # TODO: implement a local search improvement operator, ie. convert
                         # the algorithm to a Lamarckian memetatic algortihm
 
                         offspring.append(mutated_child) 
-                        #offspring.append(child)
+
+                        if np.random.uniform(0, 1) < 0.2:
+                            offspring.append(child)
 
                     # NOTE: we are simply interested in optimizing the existing angles within the individual,
                     # hence we create a new offspring where a few of the angles are different compared to 
                     # the original individual, sort of like a Lamarckian mematic algortihm, however
                     # here the local search is done using a stochastic operator.
-                    offspring.append(self.fix_length(self.wiggle_angles(deepcopy(self.population[i]), q = np.power(ratio_of_time_used, 2) * 0.2)))
+
+                    index_of_individual_to_be_wiggled = parent_indicies[np.random.choice(len(parent_indicies))]
+                    offspring.append(self.fix_length(self.wiggle_angles(deepcopy(self.population[index_of_individual_to_be_wiggled]), q = 0.05)))
 
                 # Replace the worst performing individuals based on their fitness values, 
                 # however do it softly so that the population increases over time
                 # Survivor selection mechanism (Replacement)
                 gen += 1
-                self.population = survivor_selection_mechanism(offspring, ratio_of_time_used)
+                self.population = survivor_selection_mechanism(offspring)
                 probabilities = parent_selection_mechanism() 
                 cdf = np.add.accumulate(probabilities)
 
@@ -542,9 +553,9 @@ if __name__ == "__main__":
     rho = 2
     sensing_radius = 2
     eta = np.pi / 5
-    ga = GA(problem, t_max, eta, rho, sensing_radius, mu = 2048)
+    ga = GA(problem, t_max, eta, rho, sensing_radius, mu = 512, lmbda=512 * 7)
     print(ga)
-    #cProfile.run("ga.run(60, 3, ga.sigma_scaling, ga.multi_index_greedy_crossover, ga.mu_comma_lambda_selection)", sort = "cumtime")
-    route = ga.run(300, 4, ga.sigma_scaling, ga.multi_index_greedy_crossover, ga.mu_comma_lambda_selection, p_c = 1.0, progress_bar = True)
+    #cProfile.run("ga.run(60, 3, ga.sigma_scaling, ga.unidirectional_greedy_crossover, ga.mu_comma_lambda_selection, p_c = 1.0, progress_bar = True)", sort = "cumtime")
+    route = ga.run(300, 3, ga.sigma_scaling, ga.unidirectional_greedy_crossover, ga.mu_comma_lambda_selection, p_c = 1.0, progress_bar = True)
     problem.plot_with_route(route, sensing_radius, rho, eta)
     plt.show()

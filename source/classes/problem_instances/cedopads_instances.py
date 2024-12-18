@@ -70,7 +70,6 @@ class CEDOPADSNode:
             phis.append(phi)
             zetas.append(zeta)
 
-        #print(phis, zetas)
         assert all(phi <= zeta for phi, zeta in zip(phis, zetas))
 
         return CEDOPADSNode(node_id, pos, score, np.array(thetas), np.array(phis), np.array(zetas))
@@ -250,7 +249,7 @@ class CEDOPADSInstance:
         #    for (k, psi, tau) in route:
         #        if (score := self.nodes[k].compute_score(psi, tau, eta)) > scores.get(k, 0):
         #            scores[k] = score
-        #    
+
         #    return sum(score for score in scores.values())
         
         return sum([self.nodes[k].compute_score(psi, tau, eta) for (k, psi, tau) in route])
