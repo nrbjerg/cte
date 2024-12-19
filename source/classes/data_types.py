@@ -61,6 +61,7 @@ class State:
 #    ("a", double),
 #    ("b", double)
 #])
+@dataclass
 class AngleInterval:
 
     def __init__ (self, a: float, b: float):

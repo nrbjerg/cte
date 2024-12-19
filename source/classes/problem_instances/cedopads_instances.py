@@ -140,24 +140,35 @@ class CEDOPADSInstance:
 
             return CEDOPADSInstance(file_name[:-4], source, sink, nodes) 
 
-    def plot(self, sensing_radius: float, nodes_to_exculude: Set[int], show: bool = False):
-        """Displays a plot of the problem instance, and displays the coresponding angles."""
+    def plot(self, sensing_radius: float, angle_intervals_to_exclude: Dict[int, int], show: bool = False):
+        """Displays a plot of the problem instance, and displays the coresponding angles, but excludeds the angle intervals specified by the angle_intervals_to_exclude dictionary containing node indicies and angle interval indicies."""
         plt.style.use("bmh")
 
         plt.scatter(*self.source, 120, marker = "s", c = "black", zorder=4)
         plt.scatter(*self.sink, 120, marker = "D", c = "black", zorder=4)
 
         # Plots targets
-        for k in set(range(len(self.nodes))).difference(nodes_to_exculude):
-            self.nodes[k].plot(sensing_radius, alpha = 0.1)
+        for k, node in enumerate(self.nodes):
+            if k not in angle_intervals_to_exclude.keys():
+                plt.scatter(*node.pos, node.size, c = "tab:gray")
         
+            for i, interval in enumerate(node.intervals):
+                if i != angle_intervals_to_exclude.get(k, -1):
+                    interval.plot(node.pos, sensing_radius, "tab:gray", 0.1)
+
         if show:
             plt.gca().set_aspect("equal", adjustable="box")
             plt.show()
 
     def plot_with_route(self, route: CEDOPADSRoute, sensing_radius: float, rho: float, eta: float, color: str = "tab:orange"):
         """Plots the CEDOPADS instance with a route"""
-        self.plot(sensing_radius, set(k for k, _, _ in route))
+        used_angle_intervals = {} 
+        for (k, psi, _) in route:
+            for i, interval in enumerate(self.nodes[k].intervals):
+                if interval.contains(psi):
+                    used_angle_intervals[k] = i 
+
+        self.plot(sensing_radius, used_angle_intervals)
 
         if len(route) == 0:
             raise ValueError("Got an empty route.")
@@ -165,8 +176,9 @@ class CEDOPADSInstance:
         else:
             q = self.get_states(route, sensing_radius)
             for i, (k, _, _) in enumerate(route):
-                self.nodes[k].plot(sensing_radius, color = color)
-                #plt.scatter(*self.nodes[k].pos, c = color, s = self.nodes[k].size, zorder=2)
+                self.nodes[k].intervals[used_angle_intervals[k]].plot(self.nodes[k].pos, sensing_radius, color = color, alpha = 0.2)
+                #self.nodes[k].plot(sensing_radius, color = color)
+                plt.scatter(*self.nodes[k].pos, c = color, s = self.nodes[k].size, zorder=2)
                 plt.scatter(*q[i].pos, marker="s", c = color, zorder=2)
 
             # 1. Plot route from the source to q_1
