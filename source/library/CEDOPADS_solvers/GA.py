@@ -189,6 +189,9 @@ class GA:
 
         return offspring
 
+    def bidirectional_greedy_crossover():
+        pass 
+
     #--------------------------------------------- Mutation Operators -------------------------------------- 
     def mutate(self, individual: CEDOPADSRoute, p_s: float, p_i: float, p_r: float, q: float) -> CEDOPADSRoute: 
         """Copies and mutates the copy of the individual, based on the time remaining biasing the removal of visits if the route is to long, and otherwise adding / replacing visits within the route."""
@@ -205,7 +208,9 @@ class GA:
                 # note that self.number_of_nodes and self.number_of_nodes + 1, coresponds
                 # to the source and sink nodes respectively, when passed as arguments in the
                 # pick_new_visit_based_on_distance method.
-                individual.insert(i, self.pick_new_visit_based_on_sdr_and_index(individual, i)) 
+
+                # TODO: måske skal vi ikke bruge i her? og måske skal vi tjekke om det er smartest og have den ene eller anden først
+                individual.insert(i, self.pick_new_visit_based_on_sdr_and_index(individual, i))  
                 i += 2
             else:
                 i += 1
@@ -288,8 +293,10 @@ class GA:
                 interval: AngleInterval = np.random.choice(self.problem.nodes[k].intervals, size = 1, p = interval_probabilities)[0]
                 
                 # Generate angles from interval
-                new_psi =  interval.generate_uniform_angle()
-                new_tau = np.random.uniform(np.pi + new_psi - self.eta / 2, np.pi + new_psi + self.eta / 2) % (2 * np.pi)
+                # TODO: Consider using beta distribution to compute these
+                new_psi = interval.generate_uniform_angle()
+                new_tau = (np.pi + new_psi + (np.random.beta(3, 3) - 0.5) * self.eta)  % (2 * np.pi)
+                #np.random.uniform(np.pi + new_psi - self.eta / 2, np.pi + new_psi + self.eta / 2) % (2 * np.pi)
                 individual[idx] = (k, new_psi, new_tau)
 
                             # Generate a new tau non-uniformly based on the scale_for_tau argument
@@ -309,6 +316,7 @@ class GA:
                         break
 
                 # Set bounds for random number generation NOTE: There are checks for these in the data_types.py file.
+                # TODO: Consider using beta distribution to compute these
                 new_psi = interval.generate_truncated_normal_angle(mean = self.problem.nodes[k].thetas[jdx], scale_modifier = scale_modifier)
                 new_tau = truncnorm.rvs(-self.eta / (2 * scale_for_tau), self.eta / (2 * scale_for_tau), 
                                         loc = np.pi + new_psi, scale = scale_for_tau) % (2 * np.pi)
@@ -325,9 +333,7 @@ class GA:
 
     def sigma_scaling(self, c: float = 2) -> ArrayLike:
         """Uses sigma scaling to compute the probabilities that each indvidual in the population is chosen for recombination."""
-        mean = np.mean(self.fitnesses)
-        std_var = np.std(self.fitnesses)
-        modified_fitnesses = np.maximum(self.fitnesses - (mean - c * std_var), 0)
+        modified_fitnesses = np.maximum(self.fitnesses - (np.mean(self.fitnesses) - c * np.std(self.fitnesses)), 0)
         return modified_fitnesses / np.sum(modified_fitnesses)
 
     def exponential_ranking(self) -> ArrayLike:
@@ -388,9 +394,8 @@ class GA:
             return [offspring[i] for i in indicies_of_new_generation]
 
     # -------------------------------------------- Main Loop of GA --------------------------------------- #
-    def run(self, time_budget: float, m: int, parent_selection_mechanism: Callable[[], List[CEDOPADSRoute]], crossover_mechanism: Callable[[List[CEDOPADSRoute]], List[CEDOPADSRoute]], survivor_selection_mechanism: Callable[[List[CEDOPADSRoute], float], ArrayLike], p_c: float, progress_bar: bool = False) -> CEDOPADSRoute:
+    def run(self, time_budget: float, m: int, parent_selection_mechanism: Callable[[], List[CEDOPADSRoute]], crossover_mechanism: Callable[[List[CEDOPADSRoute]], List[CEDOPADSRoute]], survivor_selection_mechanism: Callable[[List[CEDOPADSRoute], float], ArrayLike], progress_bar: bool = False) -> CEDOPADSRoute:
         """Runs the genetic algorithm for a prespecified time, given by the time_budget, using k-point crossover with m parrents."""
-        assert p_c <= 1.0
 
         start_time = time.time()
         # Generate an initial population, which almost satifies the distant constraint, ie. add nodes until
@@ -450,13 +455,13 @@ class GA:
 
                         for child in crossover_mechanism([self.population[i] for i in parent_indicies], [scores[i] for i in parent_indicies], [states[i] for i in parent_indicies]): 
                             if np.random.uniform(0, 1) < 0.2:
-                                offspring.append(deepcopy(child))
-                            mutated_child = self.mutate(child, p_s = 0.1, p_i = 0.3, p_r = 0.2, q = 0.1)
+                                offspring.append(child) # FIXME: Note removed a deepcopy
+                            else:
+                                offspring.append(self.mutate(child, p_s = 0.1, p_i = 0.3, p_r = 0.2, q = 0.1))
 
                             # TODO: implement a local search improvement operator, ie. convert
                             # the algorithm to a Lamarckian memetatic algortihm
 
-                            offspring.append(mutated_child) 
                             #offspring.append(child)
 
                         # NOTE: we are simply interested in optimizing the existing angles within the individual,
@@ -505,19 +510,13 @@ class GA:
                 states = [[self.problem.nodes[k].get_state(self.sensing_radius, psi, tau) for (k, psi, tau) in parent] for parent in self.population]
                 offspring = []
                 while len(offspring) < self.lmbda:
-                #for i in range(int(np.ceil(self.mu * p_c))):
                     parent_indicies = self.stochastic_universal_sampling(cdf, m = m)
 
                     for child in crossover_mechanism([self.population[i] for i in parent_indicies], [scores[i] for i in parent_indicies], [states[i] for i in parent_indicies]): 
-                        mutated_child = self.mutate(child, p_s = 0.2, p_i = 0.3, p_r = 0.2, q = 0.05)
-
-                        # TODO: implement a local search improvement operator, ie. convert
-                        # the algorithm to a Lamarckian memetatic algortihm
-
-                        offspring.append(mutated_child) 
-
                         if np.random.uniform(0, 1) < 0.2:
-                            offspring.append(child)
+                            offspring.append(child) # FIXME: Note removed a deepcopy
+                        else:
+                            offspring.append(self.mutate(child, p_s = 0.1, p_i = 0.3, p_r = 0.2, q = 0.1))
 
                     # NOTE: we are simply interested in optimizing the existing angles within the individual,
                     # hence we create a new offspring where a few of the angles are different compared to 
@@ -556,6 +555,6 @@ if __name__ == "__main__":
     ga = GA(problem, t_max, eta, rho, sensing_radius, mu = 512, lmbda=512 * 7)
     print(ga)
     #cProfile.run("ga.run(60, 3, ga.sigma_scaling, ga.unidirectional_greedy_crossover, ga.mu_comma_lambda_selection, p_c = 1.0, progress_bar = True)", sort = "cumtime")
-    route = ga.run(300, 3, ga.sigma_scaling, ga.unidirectional_greedy_crossover, ga.mu_comma_lambda_selection, p_c = 1.0, progress_bar = True)
+    route = ga.run(10, 3, ga.sigma_scaling, ga.unidirectional_greedy_crossover, ga.mu_comma_lambda_selection, progress_bar = True)
     problem.plot_with_route(route, sensing_radius, rho, eta)
     plt.show()

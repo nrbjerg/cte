@@ -22,6 +22,6 @@ def get_intersection_points_between_circles(c1: Position, r1: float, c2: Positio
 
     x2 = x0 - h * (c2[1] - c1[1]) / d
     y2 = y0 + h * (c2[0] - c1[0]) / d
-        
+
     return (np.array([x1, y1]), np.array([x2, y2])) 
 

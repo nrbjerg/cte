@@ -3,18 +3,16 @@ from __future__ import annotations
 from numpy.typing import ArrayLike
 import numpy as np
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, Iterable
 from matplotlib import pyplot as plt 
 from matplotlib import patches
 import numba as nb
-import random
 from scipy.stats import truncnorm
-from numba.experimental import jitclass
-from numba import double
 
 Position = ArrayLike
 Velocity = ArrayLike
 Matrix = ArrayLike
+Vector = ArrayLike
 
 Angle = float
 
@@ -80,9 +78,9 @@ class AngleInterval:
             return self.a <= psi and psi <= self.b
         else:
             # Check if it is in the compliment of [b, a]
-            return (self.b <= psi and psi < 2 * np.pi) or (psi >= 0 and psi <= self.a)
+            return psi <= self.b or psi >= self.a
         
-    def plot(self, ancour: Position, r: float, color: str, alpha: float):
+    def plot(self, ancour: Position, r: float, fillcolor: str, edgecolor: str, alpha: float):
         """Plots the angle as a circle arc of radius r with a center at the ancour point"""
         # The angles from the centers 
         #a0, b0 = (self.a + np.pi) % (2 * np.pi), (self.b + np.pi) % (2 * np.pi)
@@ -95,7 +93,7 @@ class AngleInterval:
                                    ancour[1] + r * np.sin(angles)))
         points = np.vstack([points_on_arc.T, ancour])
 
-        cone = patches.Polygon(points, closed=True, color = color, alpha = alpha)
+        cone = patches.Polygon(points, closed=True, facecolor = fillcolor, edgecolor = edgecolor, alpha = alpha)
         plt.gca().add_patch(cone)
 
     def generate_uniform_angle(self) -> Angle:
@@ -172,6 +170,11 @@ class AngleInterval:
             return self.a
         else:
             return psi
+
+def compute_complement_of_angle_intervals(intervals: Iterable[AngleInterval]) -> Iterable[AngleInterval]:
+    """Computes the complement of the angle intervals given."""
+
+
 
 if __name__ == "__main__":
     interval = AngleInterval(5, 1)

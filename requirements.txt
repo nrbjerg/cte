@@ -6,3 +6,4 @@ gstools
 scikit-learn
 scipy
 tqdm
+pqdm
