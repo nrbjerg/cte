@@ -171,11 +171,6 @@ class AngleInterval:
         else:
             return psi
 
-def compute_complement_of_angle_intervals(intervals: Iterable[AngleInterval]) -> Iterable[AngleInterval]:
-    """Computes the complement of the angle intervals given."""
-
-
-
 if __name__ == "__main__":
     interval = AngleInterval(5, 1)
     angles = []

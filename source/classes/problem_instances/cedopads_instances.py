@@ -52,27 +52,22 @@ class CEDOPADSNode:
         self.score = score
         self.thetas = thetas
         self.phis = phis
-        self.zetas = zetas
     
         self.intervals = [AngleInterval(theta - phi, theta + phi) for theta, phi in zip(thetas, phis)]
 
     @staticmethod
     def load_from_line(line: str, node_id: int) -> CEDOPADSNode:
         """Loads a CEDOPADS node from a line"""
-        position_and_score, angle_part = tuple(line.split(":"))
-        x, y, score = map(float, position_and_score.split(" "))
+        position_and_score, angle_specification = line.split(" ")[:3], line.split(" ")[3:]
+        x, y, score = map(float, position_and_score)
         pos = np.array((x, y))
 
-        thetas, phis, zetas = [], [], []
-        for part in angle_part.split(","):
-            theta, phi, zeta = map(float, part.split(" "))
-            thetas.append(theta)
-            phis.append(phi)
-            zetas.append(zeta)
+        thetas, phis = [], []
+        for idx in range(len(angle_specification) // 2):
+            thetas.append(float(angle_specification[2 * idx]))
+            phis.append(float(angle_specification[2 * idx + 1]))
 
-        assert all(phi <= zeta for phi, zeta in zip(phis, zetas))
-
-        return CEDOPADSNode(node_id, pos, score, np.array(thetas), np.array(phis), np.array(zetas))
+        return CEDOPADSNode(node_id, pos, score, np.array(thetas), np.array(phis))
          
     def compute_score(self, psi: Angle, tau: Angle, eta: float) -> float:
         """Computes the score of the given node, given a heading angle psi."""
@@ -95,7 +90,7 @@ class CEDOPADSNode:
         # If there is no angle inteval which contains psi return none
         return None 
 
-    def plot(self, sensing_radius: float, color: str = "tab:gray", alpha = 0.2) -> None:
+    def plot(self, r_min: float, r_max: float, color: str = "tab:gray", alpha = 0.2) -> None:
         """Plots the point, and the angle cones."""
         plt.scatter(self.pos[0], self.pos[1], self.size, c = color)
         
