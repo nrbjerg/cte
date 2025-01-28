@@ -4,7 +4,7 @@ import matplotlib.patches
 import numpy as np 
 import numba as nb
 from matplotlib import pyplot as plt 
-from typing import Union, Tuple
+from typing import Union, Tuple, List
 from enum import IntEnum
 from dataclasses import dataclass
 import matplotlib
@@ -14,6 +14,7 @@ class Direction(IntEnum):
     """Models a direction of a turn"""
     RIGHT = 0
     LEFT = 1
+    SAIGHT = 2
 
 @dataclass
 class CSPath:
@@ -53,6 +54,10 @@ class CSPath:
         inflection_point = center + rotation_matrix.T.dot(self.rho * np.array([np.cos(theta), np.sin(theta)]))
         plt.plot([inflection_point[0], p[0]], [inflection_point[1], p[1]], c = color, zorder=2)
     
+    def sample(self, delta: float) -> List[State]:
+        """Samples the relaxed dubins path at equidistant points placed delta units appart."""
+        pass 
+
     def __repr__(self) -> str:
         """Returns a string representation of the path."""
         path_type = "LS" if self.direction == Direction.LEFT else "RS"
@@ -100,6 +105,52 @@ class CCPath:
                                            theta1=180 - np.rad2deg(v) + injuction_angle, theta2=180 + injuction_angle, edgecolor=color, lw=2, zorder=2)
 
         plt.gca().add_patch(second_arc)
+
+    def sample(self, q: State, p: Position, delta: float) -> List[State]:
+        """Samples the relaxed dubins path at equidistant points placed delta units appart."""
+        states = []
+        rotation_angle = np.pi / 2 - q.angle
+        rotation_matrix = np.array([[np.cos(rotation_angle), -np.sin(rotation_angle)], 
+                                    [np.sin(rotation_angle), np.cos(rotation_angle)]])
+
+        (u, v) = self.radians_traversed_on_arcs
+        n = np.ceil(2 * u * self.rho / delta)
+        m = np.ceil(2 * v * self.rho / delta)
+        # Plot the first arc.
+        if self.directions[0] == Direction.RIGHT:
+            injuction_angle = np.pi / 2 + np.rad2deg(q.angle - u)
+            first_center = rotation_matrix.T.dot(np.array([self.rho, 0])) + q.pos
+            for i in range(n):
+                angle = q.angle + np.pi / 2 - i / n * u 
+                position = first_center + self.rho * np.array([np.cos(angle), np.sin(angle)])
+                states.append(State(position, (angle - np.pi / 2) % (2 * np.pi)))
+
+            #first_arc = matplotlib.patches.Arc(first_center, 2 * self.rho, 2 * self.rho,
+            #                               theta1=injuction_angle, theta2=np.rad2deg(q.angle) + 90, edgecolor=color, lw=2, zorder=2)
+        else:
+            injuction_angle = np.rad2deg(q.angle + u) - 90
+            first_center = rotation_matrix.T.dot(np.array([-self.rho, 0])) + q.pos
+            for i in range(m):
+                angle = q.angle - np.pi  2 + i / n * u
+                position = first_center + self.rho * np.array([np.cos(angle), np.sin(angle)])
+                states.append(State(position, (angle + np.pi / 2) % (2 * np.pi)))
+
+            #first_arc = matplotlib.patches.Arc(first_center, 2 * self.rho, 2 * self.rho,
+            #                               theta1=np.rad2deg(q.angle) - 90, theta2=injuction_angle, edgecolor=color, lw=2, zorder=2)
+        #plt.gca().add_patch(first_arc)
+
+        # Plot the second arc.
+        if self.directions[1] == Direction.LEFT:
+            second_center = rotation_matrix.T.dot(np.array([self.rho * (1 - 2 * np.cos(u)), 2 * self.rho * np.sin(u)])) + q.pos
+            second_arc = matplotlib.patches.Arc(second_center, 2 * self.rho, 2 * self.rho,
+                                           theta1=injuction_angle + 180, theta2=injuction_angle + 180 + np.rad2deg(v), edgecolor=color, lw=2, zorder=2)
+        else:
+            second_center = rotation_matrix.T.dot(np.array([self.rho * (2 * np.cos(u) - 1), 2 * self.rho * np.sin(u)])) + q.pos
+            second_arc = matplotlib.patches.Arc(second_center, 2 * self.rho, 2 * self.rho,
+                                           theta1=180 - np.rad2deg(v) + injuction_angle, theta2=180 + injuction_angle, edgecolor=color, lw=2, zorder=2)
+
+       
+        pass 
 
     def __repr__(self) -> str:
         """Returns a string representation of the path."""
@@ -237,6 +288,10 @@ def can_be_reached(q: State, p: Position, rho: float, remaining_travel_budget: f
     """Simply checks if the position p can be reached using a relaxed dubins path from the state q."""
     return compute_length_of_relaxed_dubins_path(q, p, rho, need_path=False) < remaining_travel_budget 
 
+def sample_relaxed_dubins_path(q: State, p: Position, rho: float, delta: float) -> List[State]:
+    """Samples the relaxed dubins path from q to p with minimum turning radius rho, at equidistant points at delta units appart."""
+    return compute_relaxed_dubins_path(q, p, rho).sample(q, p, delta)
+    
 if __name__ == "__main__":
     angle = np.pi / 3 
     q = State(np.array([-2.0, -5.6]), 4.71)

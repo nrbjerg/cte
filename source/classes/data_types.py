@@ -2,8 +2,9 @@
 from __future__ import annotations
 from numpy.typing import ArrayLike
 import numpy as np
-from dataclasses import dataclass
-from typing import Tuple, Iterable
+from dataclasses import dataclass, field
+import matplotlib as mpl
+from typing import Tuple
 from matplotlib import pyplot as plt 
 from matplotlib import patches
 import numba as nb
@@ -170,6 +171,71 @@ class AngleInterval:
             return self.a
         else:
             return psi
+
+@dataclass()
+class AreaOfAcquisition:
+    """Models the area of acquisition corresponding to a given angle specification."""
+    theta: float
+    phi: float
+
+    a: float = field(init = False)
+    b: float = field(init = False)
+
+    def __post_init__ (self):
+        """Simply initializes a and b"""
+        self.a = (self.theta - self.phi) % (2 * np.pi)
+        self.b = (self.theta + self.phi) % (2 * np.pi)
+
+    def contains_angle(self, psi: float) -> bool:
+        """Checks if the angle is within the area of acquisition"""
+        return compute_difference_between_angles(psi, self.theta) <= self.phi
+
+    def generate_uniform_angle(self) -> Angle:
+        """Generates a random angle from the angle interval, uniformly."""
+        if self.a < self.b:
+            return np.random.uniform(self.a, self.b)
+        
+        # Either generate an angle above or below the x axis depending on the proporition of the 
+        # propotion of the arc described by the angle interval being above / below the x axis.
+        elif np.random.uniform(0, 1) < self.b / (self.b + 2 * np.pi - self.a):
+            return np.random.uniform(0, self.b)
+        else:
+        #elif np.random.choice(2, size = 1, p = [self.b, 2 * np.pi - self.a]) == 1:
+            return np.random.uniform(self.a, 2 * np.pi)
+
+    def generate_truncated_normal_angle(self, mean: float, scale_modifier: float = 0.05) -> Angle:
+        """Generates a truncated normal angle, with a given mean."""
+        # NOTE: Please have a look at the following website https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.truncnorm.html#scipy.stats.truncnorm
+        # for documentation on the truncnorm.rvs method and its arguments.
+        if self.a < self.b:
+            scale = scale_modifier * (self.b - self.a) 
+            return truncnorm.rvs((self.a - mean) / scale, (self.b - mean)  / scale, loc = mean, scale = scale)
+        else:
+            scale = scale_modifier * (2 * np.pi - self.b + self.a)
+            return truncnorm.rvs((self.a - mean)  / scale, (self.b + 2 * np.pi - mean) / scale, loc = mean, scale = scale) % (2 * np.pi)
+
+    def plot(self, ancour: Position, r_min: float, r_max: float, color: str, alpha: float):
+        """Plots the area of acquisition"""
+        if self.phi == 3.142:
+            plt.gca().add_patch(mpl.patches.Annulus(ancour, r_max, r_max - r_min,  facecolor= color, edgecolor = color, alpha = alpha))
+        else:
+            if self.a < self.b:
+                angles = np.linspace(self.a, self.b, 50) 
+            else:
+                angles = np.linspace(self.a, (2 * np.pi) * (self.a // (2 * np.pi) + 1) + self.b, 50)
+
+            points_on_outer_arc = np.vstack((ancour[0] + r_max * np.cos(angles),  
+                                             ancour[1] + r_max * np.sin(angles)))
+        
+            points_on_inner_arc = np.vstack((ancour[0] + r_min * np.cos(angles[::-1]),  
+                                             ancour[1] + r_min * np.sin(angles[::-1])))
+
+            points = np.vstack([points_on_inner_arc.T, points_on_outer_arc.T])
+
+            cone = patches.Polygon(points, closed=True, facecolor = color, edgecolor = color, alpha = alpha)
+            plt.gca().add_patch(cone)
+
+  
 
 if __name__ == "__main__":
     interval = AngleInterval(5, 1)
