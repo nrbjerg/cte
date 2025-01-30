@@ -14,17 +14,6 @@ import dubins
 def mod2pi(theta: float) -> Angle:
     return (theta - (2 * np.pi) * np.floor(theta / (2 * np.pi)))
 
-class Dir(IntEnum):
-    """Models a direction of a turn"""
-    R = 0
-    L = 1
-    S = 2
-
-    def __repr__ (self) -> str:
-        if self == Dir.R: return "R"
-        if self == Dir.L: return "L"
-        else: return "S"
-
 def LSL_path(d: float, alpha: Angle, beta: Angle) -> Optional[Tuple[float, float, float]]:
     """Computes the lengths of the LSL path if it is posible to traverse such a path."""
     if (p_sq := (2 + np.square(d) - 2 * np.cos(alpha - beta) + 2 * d * (np.sin(alpha) - np.sin(beta)))) >= 0:
@@ -98,33 +87,6 @@ def dubins_shortest_path(q_i: State, q_f: State, rho: float):
 
     return ([p * rho for p in shortest_params], shortest_path_type)
 
-def plot_path(q: State, segment_types: Iterable[Dir], segment_lengths: Iterable[float], rho: float, color: str = "tab:green"):
-    """Plots an arbitary dubins path, of the given segment types and parameters"""
-    pos = deepcopy(q.pos)
-    angle = deepcopy(q.angle)
-    for i, (typ, length) in enumerate(zip(segment_types, segment_lengths)):
-        match typ:
-            case Dir.S:
-                plt.plot([pos[0], pos[0] + np.cos(angle) * length],
-                         [pos[1], pos[1] + np.sin(angle) * length], color = color, zorder=2)
-                pos[0] += np.cos(angle) * length
-                pos[1] += np.sin(angle) * length
-            case Dir.R:
-                center = pos + rho * np.array([np.cos(angle - np.pi / 2), np.sin(angle - np.pi / 2)])
-                plt.scatter(*center, color = "tab:red" if i == 0 else "tab:purple")
-                arc = mpl.patches.Arc(center, 2 * rho, 2 * rho, theta2 = np.rad2deg(angle + np.pi / 2), theta1 = np.rad2deg(angle + np.pi / 2 - length / rho), edgecolor = color, zorder = 4)
-                plt.gca().add_patch(arc) 
-                pos = center + rho * np.array([np.cos(angle + np.pi / 2 - length / rho), np.sin(angle + np.pi / 2 - length / rho)])
-                angle = mod2pi(angle - length / rho)
-
-            case Dir.L:
-                center = pos + rho * np.array([np.cos(angle + np.pi / 2), np.sin(angle + np.pi / 2)])
-                plt.scatter(*center, color = "tab:red" if i == 0 else "tab:purple")
-                arc = mpl.patches.Arc(center, 2 * rho, 2 * rho, theta1 = np.rad2deg(angle - np.pi / 2), theta2 = np.rad2deg(angle - np.pi / 2 + length / rho), edgecolor = color, zorder = 2)
-                plt.gca().add_patch(arc) 
-                pos = center + rho * np.array([np.cos(angle - np.pi / 2 + length / rho), np.sin(angle - np.pi / 2 + length / rho)])
-                angle = mod2pi(angle + length / rho)
-
 if __name__ == "__main__":
     rho = 1
 
@@ -136,13 +98,7 @@ if __name__ == "__main__":
         results = dubins_shortest_path(q_i, q_f, rho)
         print(f"Results: {results}")
         legnth_from_dubins = dubins.shortest_path(q_i.to_tuple(), q_f.to_tuple(), rho).path_length()
-        path_type_dubins = dubins.shortest_path(q_i.to_tuple(), q_f.to_tuple(), rho).path_type()
-        path_type = results[1]
-        segment_lengths = [
-            dubins.shortest_path(q_i.to_tuple(), q_f.to_tuple(), rho).segment_length(0),
-            dubins.shortest_path(q_i.to_tuple(), q_f.to_tuple(), rho).segment_length(1),
-            dubins.shortest_path(q_i.to_tuple(), q_f.to_tuple(), rho).segment_length(2)
-        ]
+ 
 
         int_to_dir_string = {
             0: (Dir.L, Dir.S, Dir.L),

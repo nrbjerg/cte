@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 import matplotlib as mpl
 from typing import Tuple
 from matplotlib import pyplot as plt 
+from enum import IntEnum
 from matplotlib import patches
 import numba as nb
 from scipy.stats import truncnorm
@@ -234,6 +235,24 @@ class AreaOfAcquisition:
 
             cone = patches.Polygon(points, closed=True, facecolor = color, edgecolor = color, alpha = alpha)
             plt.gca().add_patch(cone)
+
+class Dir(IntEnum):
+    """Models a direction of a turn"""
+    R = 0
+    L = 1
+    S = 2
+
+    def __repr__ (self) -> str:
+        """Return a string representation of the direction."""
+        if self == Dir.R: return "R"
+        if self == Dir.L: return "L"
+        else: return "S"
+
+    def flip (self) -> Dir:
+        """Flips the direction."""
+        if self == Dir.R: return Dir.L
+        elif self == Dir.L: return Dir.R
+        else: return Dir.S
 
   
 
