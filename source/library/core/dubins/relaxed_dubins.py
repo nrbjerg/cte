@@ -131,7 +131,7 @@ class CCPath:
             injuction_angle = np.rad2deg(q.angle + u) - 90
             first_center = rotation_matrix.T.dot(np.array([-self.rho, 0])) + q.pos
             for i in range(m):
-                angle = q.angle - np.pi  2 + i / n * u
+                angle = q.angle - np.pi / 2 + i / n * u
                 position = first_center + self.rho * np.array([np.cos(angle), np.sin(angle)])
                 states.append(State(position, (angle + np.pi / 2) % (2 * np.pi)))
 
