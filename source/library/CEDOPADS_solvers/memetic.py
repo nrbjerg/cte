@@ -1,12 +1,16 @@
 # %%
+import os 
+import multiprocessing
 import dubins
+import datetime
 from copy import deepcopy
 import random
 import time
-from typing import List, Optional, Callable, Set
+from typing import List, Optional, Callable, Set, Tuple
 import numpy as np
 from classes.problem_instances.cedopads_instances import CEDOPADSInstance, load_CEDOPADS_instances, CEDOPADSRoute, Visit, UtilityFunction, utility_fixed_optical
-from library.core.relaxed_dubins import compute_length_of_relaxed_dubins_path
+from library.core.dubins.relaxed_dubins import compute_length_of_relaxed_dubins_path
+import logging
 from classes.data_types import State, Angle, AngleInterval, Matrix, Position, Vector
 from numpy.typing import ArrayLike
 import hashlib
@@ -33,7 +37,7 @@ def compute_sdr_tensor(positions: Matrix, scores: ArrayLike, c_s: float, c_d: fl
                 # link to an explaination of the formula: https://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line
                 area = np.abs((positions[i][1] - positions[j][1]) * positions[k][0] - (positions[i][0] - positions[j][0]) * positions[k][1] + positions[i][0] * positions[j][1] - positions[i][1] * positions[j][0])
 
-                distance = area / np.linalg.norm(positions[i] - positions[j]) + 0.01 
+                distance = (area + 0.01) / (np.linalg.norm(positions[i] - positions[j]) + 0.01) # We need to not divide by 0 both here and later.
                 # NOTE: the 0.01 is used in case the area is 0, which happends if the points at positions i,j and k are colinear
                 tensor[i, j, k] = scores[k] ** c_s / distance ** c_d # NOTE: The 0.01 is used to prevent nummerical errors, if we get a 0 we might divide by inf.
                 tensor[j, i, k] = tensor[i, j, k]
@@ -502,6 +506,52 @@ class GA:
                             "Best": f"({self.fitnesses[idx_of_individual_with_highest_fitness]:.1f}, {length_of_best_route:.1f}, {len(self.population[idx_of_individual_with_highest_fitness])})",
                             "Aver": f"({avg_fitness:.1f}, {avg_distance:.1f}, {avg_length:.1f})"
                     })
+
+        else:
+            idx_of_individual_with_highest_fitness = np.argmax(self.fitnesses)
+
+            while (elapsed_time := (time.time() - start_time)) < time_budget:
+
+                # Generate new offspring using parent selection based on the computed fitnesses, to select m parents
+                # and perform k-point crossover using these parents, to create a total of m^k children which is
+                # subsequently mutated according to the mutation_probability, this also allows the "jiggeling" of 
+                # the angles in order to find new versions of the parents with higher fitness values.
+                scores = [[self.problem_instance.nodes[k].compute_score(psi, tau, r, self.problem_instance.eta, self.utility_function) for (k, psi, tau, r) in parent] for parent in self.population]
+                states = [[self.problem_instance.nodes[k].get_state(r, psi, tau) for (k, psi, tau, r) in parent] for parent in self.population]
+                offspring = []
+                while len(offspring) < self.lmbda:
+                    parent_indicies = self.stochastic_universal_sampling(cdf, m = m)
+
+                    for child in crossover_mechanism([self.population[i] for i in parent_indicies], [scores[i] for i in parent_indicies], [states[i] for i in parent_indicies]): 
+                        #if np.random.uniform(0, 1) < 0.1:
+                            #offspring.append(deepcopy(child)) # FIXME: Note removed a deepcopy
+                        offspring.append(self.mutate(deepcopy(child), p_s = 0.1, p_i = 0.3, p_r = 0.2, q = 0.1))
+
+                        # TODO: implement a local search improvement operator, ie. convert
+                        # the algorithm to a Lamarckian memetatic algortihm
+
+                        #offspring.append(child)
+
+                    # NOTE: we are simply interested in optimizing the existing angles within the individual,
+                    # hence we create a new offspring where a few of the angles are different compared to 
+                    # the original individual, sort of like a Lamarckian mematic algortihm, however
+                    # here the local search is done using a stochastic operator.
+                    #offspring.append(self.fix_length(self.wiggle_angles(deepcopy(self.population[i]), q = 0.05)))
+                    index_of_individual_to_be_wiggled = parent_indicies[np.random.choice(len(parent_indicies))]
+                    offspring.append(self.fix_length(self.wiggle_angles(deepcopy(self.population[index_of_individual_to_be_wiggled]), q = 0.2)))
+
+                # Replace the worst performing individuals based on their fitness values, 
+                # however do it softly so that the population increases over time
+                # Survivor selection mechanism (Replacement)
+                gen += 1
+                self.population = survivor_selection_mechanism(offspring)
+                probabilities = parent_selection_mechanism() 
+                cdf = np.add.accumulate(probabilities)
+
+                idx_of_individual_with_highest_fitness = np.argmax(self.fitnesses)
+                if self.fitnesses[idx_of_individual_with_highest_fitness] > self.highest_fitness_recorded:
+                    self.individual_with_highest_recorded_fitness = self.population[idx_of_individual_with_highest_fitness]
+                    self.highest_fitness_recorded = self.fitnesses[idx_of_individual_with_highest_fitness]
 #        else:
 #            # Set initial progress bar information.
 #            idx_of_individual_with_highest_fitness = np.argmax(self.fitnesses)
@@ -548,11 +598,47 @@ class GA:
 #
         return self.individual_with_highest_recorded_fitness
 
-if __name__ == "__main__":
+# This is what needs to be updates each time.
+def worker_function(args: Tuple[int, float, CEDOPADSInstance]) -> Tuple[Vector, str]:
+    """The actual function which calls the genenetic algorithm and generates the results"""
+    number_of_repetitions, time_budget, problem_instance = args
     utility_function = utility_fixed_optical
-    problem_instance: CEDOPADSInstance = CEDOPADSInstance.load_from_file("p4.4.a.d.b.txt", needs_plotting = True)
     ga = GA(problem_instance, utility_function, mu = 512, lmbda=512 * 7)
-    #cProfile.run("ga.run(60, 3, ga.sigma_scaling, ga.unidirectional_greedy_crossover, ga.mu_comma_lambda_selection, p_c = 1.0, progress_bar = True)", sort = "cumtime")
-    route = ga.run(300, 3, ga.sigma_scaling, ga.unidirectional_greedy_crossover, ga.mu_comma_lambda_selection, progress_bar = True)
-    problem_instance.plot_with_route(route, utility_function)
-    plt.show()
+    parent_selection = ga.sigma_scaling
+    crossover_operator = ga.unidirectional_greedy_crossover
+    survivor_selection_operator = ga.mu_comma_lambda_selection
+    routes = [ga.run(time_budget, 3, parent_selection, crossover_operator, survivor_selection_operator) for _ in range(number_of_repetitions)]
+    
+    # Should simply return the results from the algorithm.
+    info = f"{utility_function=}, {parent_selection=}, {crossover_operator=}, {survivor_selection_operator=}"
+    return (np.array([problem_instance.compute_score_of_route(route, utility_function) for route in routes]), info)
+
+def quick_benchmark(k: int = 14, number_of_repetitions: int = 10, time_budget: float = 300.0):
+    """Quickly benchmarks the memetic algorithm on a total of m problem instances, using multiprocessing"""
+    logger = logging.getLogger(__name__)
+    log_file = os.path.join(os.getcwd(), "logs", f"{datetime.date.today()}-{datetime.datetime.now().strftime('%H:%M')}.log")
+    logging.basicConfig(filename=log_file, encoding="utf-8", level = logging.INFO)
+
+    random.seed(0)
+    problem_instances = random.sample(load_CEDOPADS_instances(), k)
+
+    with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
+        output = p.map(worker_function, [(number_of_repetitions, time_budget, problem_instance) for problem_instance in problem_instances])
+
+        #logger.info(f"Problems: {[problem_instance.problem_id for problem_instance in problem_instances]}")
+        for i, (result, info) in enumerate(output):
+            if i == 0: # No need to repeat our selves.
+                logger.info(info)
+
+            logger.info(f"ID: {problem_instances[i].problem_id}, max = {np.max(result):.1f}, min = {np.min(result):.1f}, mean = {np.mean(result):.1f}, std = {np.std(result):.1f}")
+
+if __name__ == "__main__":
+    quick_benchmark()
+#if __name__ == "__main__":
+#    utility_function = utility_fixed_optical
+#    problem_instance: CEDOPADSInstance = CEDOPADSInstance.load_from_file("p4.4.a.d.b.txt", needs_plotting = True)
+#    ga = GA(problem_instance, utility_function, mu = 512, lmbda=512 * 7)
+#    #cProfile.run("ga.run(60, 3, ga.sigma_scaling, ga.unidirectional_greedy_crossover, ga.mu_comma_lambda_selection, p_c = 1.0, progress_bar = True)", sort = "cumtime")
+#    route = ga.run(300, 3, ga.sigma_scaling, ga.unidirectional_greedy_crossover, ga.mu_comma_lambda_selection, progress_bar = True)
+#    problem_instance.plot_with_route(route, utility_function)
+#    plt.show()
