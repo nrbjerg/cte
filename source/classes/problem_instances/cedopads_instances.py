@@ -8,7 +8,7 @@ import os
 import numpy as np
 from matplotlib import pyplot as plt 
 import matplotlib.lines as mlines
-from library.core.relaxed_dubins import compute_relaxed_dubins_path, compute_length_of_relaxed_dubins_path
+from library.core.dubins.relaxed_dubins import compute_relaxed_dubins_path, compute_length_of_relaxed_dubins_path
 from numba import njit
 
 plt.rcParams['figure.figsize'] = [9, 9]
@@ -16,11 +16,17 @@ plt.rcParams['figure.figsize'] = [9, 9]
 # ------------------------------------------------- Utility Functions ------------------------------------------- #
 UtilityFunction = Callable[[float, Angle, Angle, Angle, Angle, float, Angle], float]
 
-@njit()
+#@njit()
 def utility_fixed_optical(base_line_score: float, theta: Angle, phi: Angle, psi: Angle, tau: Angle, r: float, eta: Angle) -> float:
     """Used to compute the score given all of the values."""
     # The difference between psi and theta measured in radians.
-    weight_from_psi = np.cos((np.pi * compute_difference_between_angles(psi, theta)) / (6 * phi))
+    if (phi == 0 or eta == 0):
+        print(f"{phi=}, {eta=}")
+    if phi != 3.142:
+        weight_from_psi = np.cos((np.pi * compute_difference_between_angles(psi, theta)) / (6 * phi))
+    else:
+        weight_from_psi = 1
+
     weight_from_tau = np.cos((np.pi * compute_difference_between_angles(tau, (psi + np.pi) % (2 * np.pi))) / (3 * eta))
 
     return base_line_score * weight_from_psi * weight_from_tau
@@ -187,9 +193,7 @@ class CEDOPADSInstance:
 
             # 2. Plot the dubins trajectories between q_i, q_i + 1
             for i in range(len(q) - 1):
-                q0 = (q[i].pos[0], q[i].pos[1], q[i].angle)
-                q1 = (q[i + 1].pos[0], q[i + 1].pos[1], q[i + 1].angle)
-                configurations = np.array(dubins.path_sample(q0, q1, self.rho, 0.1)[0])
+                configurations = np.array(dubins.path_sample(q[i].to_tuple(), q[i + 1].to_tuple(), self.rho, 0.1)[0])
                 plt.plot(configurations[:, 0], configurations[:, 1], c = color)
 
             # 3. Plot route from q_M to the sink 
@@ -263,6 +267,7 @@ class CEDOPADSInstance:
 
 def load_CEDOPADS_instances(needs_plotting: bool = False) -> List[CEDOPADSInstance]:
     """Loads the set of TOP instances saved within the resources folder."""
-    folder_with_top_instances = os.path.join(os.getcwd(), "resources", "CEDOPADS")
-    return [CEDOPADSInstance.load_from_file(os.listdir(folder_with_top_instances), needs_plotting = needs_plotting)]
+    folder_with_CEDOPADS_instances = os.path.join(os.getcwd(), "resources", "CEDOPADS")
+    files = os.listdir(folder_with_CEDOPADS_instances)
+    return [CEDOPADSInstance.load_from_file(file, needs_plotting = needs_plotting) for file in files]
             
