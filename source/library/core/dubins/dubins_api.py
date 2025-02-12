@@ -1,6 +1,6 @@
 """This module provides an API for working with the dubins library, to make it easier to work with."""
 import numpy as np
-from typing import Iterable, Tuple
+from typing import Iterable, Tuple, List
 from classes.data_types import State, Dir
 from copy import deepcopy
 import matplotlib.pyplot as plt 
@@ -33,6 +33,52 @@ def plot_path(q: State, segment_types: Iterable[Dir], segment_lengths: Iterable[
                 plt.gca().add_patch(arc) 
                 pos = center + rho * np.array([np.cos(angle - np.pi / 2 + length / rho), np.sin(angle - np.pi / 2 + length / rho)])
                 angle = (angle + length / rho) % (2 * np.pi)
+
+def sample_dubins_path(q_i: State, q_f: State, rho: float, delta: float) -> List[State]:
+    """Samples the dubins path from q_i to q_f, every delta units."""
+    states = [q_i]
+
+    pos = deepcopy(q_i.pos)
+    angle = deepcopy(q_i.angle)
+    segment_types, segment_lengths = call_dubins(q_i, q_f, rho)
+    eps = 0.01
+    for typ, length in zip(segment_types, segment_lengths):
+        match typ:
+            case Dir.S:
+                n = int(np.ceil(length / delta))
+                for k in range(n + 1):
+                    states.append(State(np.array([pos[0] + np.cos(angle) * length * (k / n), pos[1] + np.sin(angle) * length * (k / n)]), angle))
+
+                # Update position
+                pos += length * np.array([np.cos(angle), np.sin(angle)])
+
+            case Dir.R:
+                center = pos + rho * np.array([np.cos(angle - np.pi / 2), np.sin(angle - np.pi / 2)])
+
+                n = int(np.ceil(length / delta))
+                for k in range(1, n):
+                    angle_of_state = (angle - (length / rho) * (k / n)) % (2 * np.pi)
+                    pos_of_state = center + (rho + eps) * np.array([np.cos(angle_of_state + np.pi / 2), np.sin(angle_of_state + np.pi / 2)])
+                    states.append(State(pos_of_state, angle_of_state))
+                    
+                # Update angle and position
+                pos = center + (rho + eps) * np.array([np.cos(angle + np.pi / 2 - length / rho), np.sin(angle + np.pi / 2 - length / rho)])
+                angle = (angle - length / rho) % (2 * np.pi)
+
+            case Dir.L:
+                center = pos + rho * np.array([np.cos(angle + np.pi / 2), np.sin(angle + np.pi / 2)])
+
+                n = int(np.ceil(length / delta))
+                for k in range(1, n):
+                    angle_of_state = (angle + (length / rho) * (k / n)) % (2 * np.pi)
+                    pos_of_state = center + (rho + eps) * np.array([np.cos(angle_of_state - np.pi / 2), np.sin(angle_of_state - np.pi / 2)])
+                    states.append(State(pos_of_state, angle_of_state))
+                    
+                # Update angle and position
+                pos = center + rho * np.array([np.cos(angle - np.pi / 2 + length / rho), np.sin(angle - np.pi / 2 + length / rho)])
+                angle = (angle + length / rho) % (2 * np.pi)
+
+    return states + [q_f]
 
 def call_dubins(q_i: State, q_f: State, rho: float) -> Tuple[Tuple[Dir, Dir, Dir], Tuple[float, float, float]]:
     """Calls the dubins library and converts the results into the used formats."""

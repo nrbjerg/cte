@@ -82,7 +82,7 @@ class CEDOPADSNode:
 
         return 0 
 
-    def get_angle_interval(self, psi: float) -> Optional[AreaOfAcquisition]:
+    def get_AOA(self, psi: float) -> Optional[AreaOfAcquisition]:
         """Returns the angle interval which contains the given psi."""
         for aoa in self.AOAs:
             if aoa.contains_angle(psi): 
@@ -193,14 +193,15 @@ class CEDOPADSInstance:
 
             # 2. Plot the dubins trajectories between q_i, q_i + 1
             for i in range(len(q) - 1):
-                configurations = np.array(dubins.path_sample(q[i].to_tuple(), q[i + 1].to_tuple(), self.rho, 0.1)[0])
-                plt.plot(configurations[:, 0], configurations[:, 1], c = color)
+                if q[i] != q[i + 1]:
+                    configurations = np.array(dubins.path_sample(q[i].to_tuple(), q[i + 1].to_tuple(), self.rho, 0.1)[0])
+                    plt.plot(configurations[:, 0], configurations[:, 1], c = color)
 
             # 3. Plot route from q_M to the sink 
             final_path = compute_relaxed_dubins_path(q[-1], self.sink, self.rho)
             final_path.plot(q[-1], self.sink, color = color)
 
-        label = f"Score: {self.compute_score_of_route(route, utility_function):.2f}, Length: {self.compute_length_of_route(route):.2f}"
+        label = f"$Q_I = {self.compute_score_of_route(route, utility_function):.2f}$, $D_I = {self.compute_length_of_route(route):.2f}$"
         indicators = [mlines.Line2D([], [], color=color, label=label, marker = "s")]
         plt.legend(handles=indicators, loc=1)
         plt.title(f"{self.problem_id}, ($t_{{max}}: {self.t_max}, \\rho: {self.rho}, \\eta: {self.eta}$)")
@@ -208,12 +209,13 @@ class CEDOPADSInstance:
         if show:
             plt.plot()
     
+    def get_state (self, visit: Visit) -> State:
+        """Gets the state associated with the given visit"""
+        return self.nodes[visit[0]].get_state(visit[3], visit[1], visit[2])
+
     def get_states(self, route: CEDOPADSRoute) -> List[State]:
         """Returns a list of states corresponding to q_1, ..., q_M from the problem formulation."""
-        if len(route) == 0:
-            return [] 
-        else:
-            return [self.nodes[k].get_state(r, psi, tau) for k, psi, tau, r in route]
+        return [self.nodes[k].get_state(r, psi, tau) for k, psi, tau, r in route]
 
     def compute_length_of_route(self, route: CEDOPADSRoute) -> float:
         """Computes the length of the route, for the given sensing radius and turning radius rho."""
@@ -264,6 +266,23 @@ class CEDOPADSInstance:
     def is_route_feasable(self, route: CEDOPADSRoute) -> bool:
         """Checks if the route is feasable."""
         return self.compute_length_of_route(route) <= self.t_max
+    
+    def compute_sdr(self, visit: Visit, route: CEDOPADSRoute, idx: int, utility_function: UtilityFunction) -> float:
+        """Computes the sdr score of inserting the visit into the route at index idx."""
+        score = self.compute_score_of_visit(visit, utility_function)
+        q = self.get_state(visit)
+        if idx == 0:
+            tups = (self.get_state(route[idx - 1]).to_tuple(), q.to_tuple())
+            return score / (dubins.shortest_path(tups[0], tups[1], self.rho).path_length() + 
+                            compute_length_of_relaxed_dubins_path(q.angle_complement(), self.source, self.rho))
+        elif idx == len(route) - 1:
+            tups = (self.get_state(route[idx - 1]).to_tuple(), q.to_tuple())
+            return score / (dubins.shortest_path(tups[0], tups[1], self.rho).path_length() + 
+                            compute_length_of_relaxed_dubins_path(q, self.sink, self.rho))
+        else:
+            tups = (self.get_state(route[idx - 1]).to_tuple(), q.to_tuple(), self.get_state(route[idx + 1]).to_tuple())
+            return score / (dubins.shortest_path(tups[0], tups[1], self.rho).path_length() + 
+                            dubins.shortest_path(tups[1], tups[2], self.rho).path_length())
 
 def load_CEDOPADS_instances(needs_plotting: bool = False) -> List[CEDOPADSInstance]:
     """Loads the set of TOP instances saved within the resources folder."""

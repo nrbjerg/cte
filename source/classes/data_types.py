@@ -53,6 +53,9 @@ class State:
         plt.scatter(*self.pos, c=color)
         plt.quiver(*self.pos, np.cos(self.angle), np.sin(self.angle), color = color, width = 0.005)
 
+    def __eq__ (self, other: State) -> bool:
+        return all(self.pos == other.pos) and self.angle == other.angle
+
     # NOTE: Not supported with numba
     def __repr__ (self) -> str:
         return f"{(round(float(self.pos[0]), 2), round(float(self.pos[1]), 2), round(self.angle, 2))}"
