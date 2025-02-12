@@ -167,7 +167,9 @@ def load_TOP_instances(needs_plotting: bool = False, neighbourhood_level: int = 
             for file_name in os.listdir(folder_with_top_instances)]
 
 if __name__ == "__main__":
-    first_top_instance = load_TOP_instances(needs_plotting = True, neighbourhood_level = 1)[80]
-    first_top_instance.plot()
+    problem = TOPInstance.load_from_file("p4.4.a.txt", needs_plotting=True)
+    problem.plot()
+    #first_top_instance = load_TOP_instances(needs_plotting = True, neighbourhood_level = 1)[80]
+    #first_top_instance.plot()
     #first_top_instance.plot_with_zones([first_top_instance.nodes[1:20], first_top_instance.nodes[20:40], first_top_instance.nodes[40:60], first_top_instance.nodes[60:80], first_top_instance.nodes[80:-1]])
     #print(first_top_instance.source != first_top_instance.sink)
