@@ -14,20 +14,18 @@ def get_samples(problem: CEDOPADSInstance, k: int, i: int) -> List[Tuple[float, 
     theta, phi = problem.nodes[k].thetas[i], problem.nodes[k].phis[i]
 
     samples = []
-    if phi <= np.pi / 3:
-        psis = [theta]
-    elif phi <= np.pi / 2:
+    if phi <= np.pi / 2:
         psis = [theta, (theta + phi / 3) % (2 * np.pi), (theta - phi / 3) % (2 * np.pi)]
     else: #phi <= 2 * np.pi / 3:
         psis = [theta, (theta + phi / 4) % (2 * np.pi), (theta - phi / 4) % (2 * np.pi),
-                       (theta + phi / 3) % (2 * np.pi), (theta - phi / 3) % (2 * np.pi)]
+                       (theta + phi / 2) % (2 * np.pi), (theta - phi / 2) % (2 * np.pi)]
     
     for psi in psis:
         samples.extend([(psi, (psi + np.pi) % (2 * np.pi)), 
                         (psi, (psi + np.pi + problem.eta / 4) % (2 * np.pi)), 
                         (psi, (psi + np.pi - problem.eta / 4) % (2 * np.pi)),
-                        (psi, (psi + np.pi + problem.eta / 3) % (2 * np.pi)),
-                        (psi, (psi + np.pi - problem.eta / 3) % (2 * np.pi))])
+                        (psi, (psi + np.pi + problem.eta / 2) % (2 * np.pi)),
+                        (psi, (psi + np.pi - problem.eta / 2) % (2 * np.pi))])
 
     return samples
 
@@ -270,56 +268,6 @@ def _add_visit(route: CEDOPADSRoute, problem_instance: CEDOPADSInstance, utility
     else:
         return (route, 0, 0)
 
-    #for idx in range(len(route) + 1):
-    #    q = problem_instance.get_state(route[idx])
-    #    if idx == 0:
-    #        original_distance = compute_length_of_relaxed_dubins_path(q.angle_complement(), problem_instance.source, problem_instance.rho)
-    #    elif idx == len(route):
-    #        original_distance = compute_length_of_relaxed_dubins_path(q, problem_instance.sink, problem_instance.rho)
-    #    else:
-    #        original_distance = dubins.shortest_path(q.to_tuple(), problem_instance.get_state(route[idx + 1]).to_tuple(), problem_instance.rho).path_length()
-
-    #    # Find the best candidate visit to add between route[idx:] and route[idx:]
-    #    for k in node_indicies:
-    #        for i in range(len(problem_instance.nodes[k].thetas)):
-    #            for (psi, tau) in get_samples(problem_instance, k, i):
-    #                # TODO:
-    #                visit = (k, psi, tau, problem_instance.sensing_radii[1])
-    #                q_v = problem_instance.get_state(visit)
-
-    #                #distance_through_visit = np.linalg.norm(node0.pos - candidate.pos) + np.linalg.norm(candidate.pos - node1.pos)
-    #                if idx == 0:
-    #                    distance_through_visit = (compute_length_of_relaxed_dubins_path(q_v.angle_complement(), problem_instance.source, problem_instance.rho) +
-    #                                              dubins.shortest_path(q_v.to_tuple(), q.to_tuple(), problem_instance.rho).path_length())
-    #                elif idx == len(route):
-    #                    distance_through_visit = (dubins.shortest_path(q.to_tuple(), q_v.to_tuple(), problem_instance.rho).path_length() + 
-    #                                              compute_length_of_relaxed_dubins_path(q_v, problem_instance.sink, problem_instance.rho))
-    #                else:
-    #                    distance_through_visit = (dubins.shortest_path(q.to_tuple(), q_v.to_tuple(), problem_instance.rho).path_length() + 
-    #                                              dubins.shortest_path(q_v.to_tuple(), problem_instance.get_state(route[idx + 1]).to_tuple(), problem_instance.rho).path_length())
-
-    #                change_in_distance = distance_through_visit - original_distance 
-    #                score_of_visit = problem_instance.compute_score_of_visit(visit, utility_function)
-
-    #                if change_in_distance == 0: # We have found a node which we can freely add.
-    #                    print("!!")
-    #                    return (route[:idx] + [visit] + route[idx:], 0, score_of_visit)
-
-    #                if (change_in_distance < remaining_distance) and (score_of_visit / change_in_distance > best_sdr):
-    #                    best_candidate = visit
-    #                    best_sdr = score_of_visit / change_in_distance
-    #                    best_change_in_score = score_of_visit
-    #                    best_idx_to_insert_candidate, best_change_in_distance = idx, change_in_distance
-
-    ## Add the candidate to the route
-    #if best_candidate != None:
-    #    print(best_idx_to_insert_candidate, len(route))
-    #    new_route = route[:best_idx_to_insert_candidate] + [best_candidate] + route[best_idx_to_insert_candidate:]
-    #    return (new_route, best_change_in_distance, best_change_in_score)
-
-    #else:
-    #    return (route, 0, 0) 
-
 def remove_visit(route: CEDOPADSRoute, problem_instance: CEDOPADSInstance, utility_function: UtilityFunction) -> Tuple[CEDOPADSRoute, float, float]:
     """Tries to remove the worst performing node (measured via the SDR) from the route"""
     worst_sdr = np.inf
@@ -387,19 +335,34 @@ def hill_climbing(initial_route: CEDOPADSRoute, problem: CEDOPADSInstance, utili
         route, change_in_distance, change_in_score = remove_visit(best_route, problem, utility_function)
         if (best_score + change_in_score) / (best_distance + change_in_distance) > best_score / best_distance:
             best_route = route
-            assert change_in_distance <= 0 and change_in_score <= 0
             best_score += change_in_score
             best_distance += change_in_distance
         else: 
             break
             
     # Add as many nodes as posible to the route, in order to increase the score.
-    while (info := _add_visit(best_route, problem, utility_function))[2] > 0:
-        best_route = info[0]
-        best_distance += info[1]
+    best_route = greedily_add_visits_while_posible(best_route, problem, utility_function, best_distance)
 
-    assert problem.compute_length_of_route(best_route) <= problem.t_max
     return best_route 
+
+def greedily_add_visits_while_posible(route: CEDOPADSRoute, problem: CEDOPADSInstance, utility_function: UtilityFunction, distance: float = None):
+    """Tries to greedily add new visits to the route, each time picking the one with the highest local SDR score, 
+    that is the change in score divided by the change in distance."""
+    if distance == None:
+        distance = problem.compute_length_of_route(route)
+
+    while (info := _add_visit(route, problem, utility_function))[2] > 0:
+        route = info[0]
+        distance += info[1]
+
+    return route
+
+#def pairwise_two_opt(route: CEDOPADSRoute, problem_instance: CEDOPADSInstance) -> CEDOPADSRoute:
+#    """Performs a pairwise 2-opt heuristic on the route, to decrease the D_I(route)."""
+#    for idx, visit0 in enumerate(route[:-1]):
+#        visit1 = route[idx + 1]
+#
+#    return route
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt 

@@ -20,7 +20,6 @@ def grasp(problem: CEDOPADSInstance, time_budget: float, p: float, utility_funct
     best_route = greedy(problem, utility_function, p = 1.0)
     best_score = problem.compute_score_of_route(best_route, utility_function)
 
-    i = 1
     while ((time.time() - start_time) < time_budget):
         candidate_route = greedy(problem, utility_function, p = p)
         candidate_route = hill_climbing(candidate_route, problem, utility_function)
@@ -29,8 +28,6 @@ def grasp(problem: CEDOPADSInstance, time_budget: float, p: float, utility_funct
             best_route = candidate_route
             best_score = candidate_score
         
-        i += 1
-
     #return best_route
     return add_free_visits(problem, best_route, utility_function)
 

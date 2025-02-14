@@ -21,11 +21,22 @@ def greedy(problem: CEDOPADSInstance, utility_function: UtilityFunction, p: floa
                 length = compute_length_of_relaxed_dubins_path(q.angle_complement(), problem.source, problem.rho)
                 candidate_visits[(k, i, j)] = score / length
 
-    k, i, j = max(candidate_visits.items(), key = lambda tup: tup[1])[0]
+    # Pick a random node from the RCL list, if p = 1.0, simply use a normal greedy algorithm
+    if p < 1.0:
+        number_of_nodes = int(np.ceil(len(candidate_visits) * (1 - p)))
+    else:
+        number_of_nodes = 1
+
+    rcl = [tup[0] for tup in sorted(candidate_visits.items(), key = lambda tup: tup[1], reverse=True)[:number_of_nodes]] 
+    k, i, j = rcl[np.random.randint(0, len(rcl))]
     psi, tau = get_samples(problem, k, i)[j]
     route = [(k, psi, tau, problem.sensing_radii[1])]
-    remaining_distance = problem.t_max - compute_length_of_relaxed_dubins_path(problem.get_state(route[-1]).angle_complement(), problem.source, problem.rho)
 
+    # Compute the remaning distance.
+    q = problem.get_state(route[-1])
+    remaining_distance = problem.t_max - compute_length_of_relaxed_dubins_path(q.angle_complement(), problem.source, problem.rho)
+
+    # Mark the visited node as visited
     unvisited_nodes = {k for k in range(len(problem.nodes)) if k != route[-1][0]}
     
     # 2. Keep going until we reach the sink, in each of the routes.
@@ -51,7 +62,7 @@ def greedy(problem: CEDOPADSInstance, utility_function: UtilityFunction, p: floa
         else:
             number_of_nodes = 1
         
-        rcl = [tup[0] for tup in sorted(candidate_visits.items(), key = lambda tup: tup[1], reverse=True)[:number_of_nodes]] # TODO
+        rcl = [tup[0] for tup in sorted(candidate_visits.items(), key = lambda tup: tup[1], reverse=True)[:number_of_nodes]] 
         k, i, j = rcl[np.random.randint(0, len(rcl))]
         psi, tau = get_samples(problem, k, i)[j]
         route.append((k, psi, tau, problem.sensing_radii[1]))
