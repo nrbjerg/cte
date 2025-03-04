@@ -1,5 +1,6 @@
 # %% 
 from __future__ import annotations
+import random
 from dataclasses import dataclass, field
 from typing import List, Tuple, Optional, Dict, Callable
 from classes.data_types import Position, AreaOfAcquisition, Angle, State, compute_difference_between_angles, Vector
@@ -16,7 +17,6 @@ plt.rcParams['figure.figsize'] = [9, 9]
 # ------------------------------------------------- Utility Functions ------------------------------------------- #
 UtilityFunction = Callable[[float, Angle, Angle, Angle, Angle, float, Angle], float]
 
-#@njit()
 def utility_fixed_optical(base_line_score: float, theta: Angle, phi: Angle, psi: Angle, tau: Angle, r: float, eta: Angle) -> float:
     """Used to compute the score given all of the values."""
     # The difference between psi and theta measured in radians.
@@ -30,6 +30,9 @@ def utility_fixed_optical(base_line_score: float, theta: Angle, phi: Angle, psi:
     weight_from_tau = np.cos((np.pi * compute_difference_between_angles(tau, (psi + np.pi) % (2 * np.pi))) / (3 * eta))
 
     return base_line_score * weight_from_psi * weight_from_tau
+
+def utility_baseline (base_line_score: float, theta: Angle, phi: Angle, psi: Angle, tau: Angle, r: float, eta: Angle) -> float:
+    return base_line_score
 
 # ------------------------------------------------- Misc Definitions -------------------------------------------- #
 
@@ -76,6 +79,9 @@ class CEDOPADSNode:
          
     def compute_score(self, psi: Angle, tau: Angle, r: float, eta: Angle, utility_function: UtilityFunction) -> float:
         """Computes the score of the given node, given a heading angle psi."""
+        if utility_function == utility_baseline: # FIXME: Hack for DOP 
+            return self.base_line_score
+
         for j, aoa in enumerate(self.AOAs):
             if aoa.contains_angle(psi):
                 return utility_function(self.base_line_score, self.thetas[j], self.phis[j], psi, tau, r, eta) 
@@ -145,6 +151,11 @@ class CEDOPADSInstance:
 
             return CEDOPADSInstance(file_name[:-4], source, sink, nodes, (r_min, r_max), t_max, rho, eta) 
 
+    def reduce(self, n: int):
+        """Reduces the problem by picking n random nodes to keep."""
+        indicies = np.random.choice(len(self.nodes), n, replace = False)
+        self.nodes = [self.nodes[i] for i in indicies]
+
     def plot(self, aoas_to_exclude: Dict[int, int], show: bool = False):
         """Displays a plot of the problem instance, and displays the coresponding angles, but excludeds the angle intervals specified by the angle_intervals_to_exclude dictionary containing node indicies and angle interval indicies."""
         plt.style.use("bmh")
@@ -159,7 +170,7 @@ class CEDOPADSInstance:
         
             for i, aoa in enumerate(node.AOAs):
                 if i != aoas_to_exclude.get(k, -1):
-                    aoa.plot(node.pos, r_min = self.sensing_radii[0], r_max = self.sensing_radii[1], color = "tab:gray", alpha = 0.1)
+                    aoa.plot(node.pos, r_min = self.sensing_radii[0], r_max = self.sensing_radii[1], color = "tab:gray", alpha = 0.5)
 
         if show:
             plt.gca().set_aspect("equal", adjustable="box")
@@ -182,7 +193,8 @@ class CEDOPADSInstance:
         else:
             q = self.get_states(route)
             for i, (k, _, _, _) in enumerate(route):
-                self.nodes[k].AOAs[used_angle_intervals[k]].plot(self.nodes[k].pos, r_min = self.sensing_radii[0], r_max = self.sensing_radii[1], color = color, alpha = 0.2)
+                if self.sensing_radii != (0, 0):
+                    self.nodes[k].AOAs[used_angle_intervals[k]].plot(self.nodes[k].pos, r_min = self.sensing_radii[0], r_max = self.sensing_radii[1], color = color, alpha = 0.5)
                 #self.nodes[k].plot(sensing_radius, color = color)
                 plt.scatter(*self.nodes[k].pos, c = color, s = self.nodes[k].size, zorder=2)
                 plt.scatter(*q[i].pos, marker="s", c = color, zorder=2)
@@ -221,17 +233,22 @@ class CEDOPADSInstance:
         """Computes the length of the route, for the given sensing radius and turning radius rho."""
         return sum(self.compute_lengths_of_route_segments(route))
 
-    def compute_lengths_of_route_segments(self, route: CEDOPADSRoute) -> List[float]:
+    def compute_lengths_of_route_segments(self, route: CEDOPADSRoute, qs: List[State] = None) -> List[float]:
         """Computes the length of the route, for the given sensing radius and turning radius rho."""
-        if len(route) == 0:
+        if qs is None:
+            qs = self.get_states(route) 
+
+        return self.compute_lengths_of_route_segments_from_states(qs)
+            
+    def compute_lengths_of_route_segments_from_states(self, qs: List[State]) -> List[float]:
+        """Computes the length of the route segments within the route corresponding to the given states."""
+        if len(qs) == 0:
             return [np.linalg.norm(self.source - self.sink)]
 
-        q = self.get_states(route) 
-        tups = [q[i].to_tuple() for i in range(len(q))]
-
-        return ([compute_length_of_relaxed_dubins_path(q[0].angle_complement(), self.source, self.rho)] + 
-                [dubins.shortest_path(tups[i], tups[i + 1], self.rho).path_length() for i in range(len(q) - 1) if tups[i] != tups[i + 1]] +
-                [compute_length_of_relaxed_dubins_path(q[-1], self.sink, self.rho)])
+        tups = [q.to_tuple() for q in qs]
+        return ([compute_length_of_relaxed_dubins_path(qs[0].angle_complement(), self.source, self.rho)] + 
+                [dubins.shortest_path(tups[i], tups[i + 1], self.rho).path_length() for i in range(len(qs) - 1) if tups[i] != tups[i + 1]] +
+                [compute_length_of_relaxed_dubins_path(qs[-1], self.sink, self.rho)])
 
     def compute_score_of_route(self, route: CEDOPADSRoute, utility_function: UtilityFunction) -> float:
         """Computes the score of a CEDOPADS route."""
@@ -261,7 +278,7 @@ class CEDOPADSInstance:
 
     def compute_scores_along_route(self, route: CEDOPADSRoute, utility_function: UtilityFunction) -> Dict[int, float]:
         """Computes the scores along the route and returns them in a dictionary, with the indicies as keys."""
-        return {i: self.compute_score_of_visit(visit, utility_function) for i, visit in enumerate(route)}
+        return [self.compute_score_of_visit(visit, utility_function) for visit in route]
 
     def is_route_feasable(self, route: CEDOPADSRoute) -> bool:
         """Checks if the route is feasable."""
