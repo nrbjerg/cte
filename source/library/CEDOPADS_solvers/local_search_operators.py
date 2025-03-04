@@ -1,8 +1,9 @@
 # %%
+import itertools
 from classes.problem_instances.cedopads_instances import CEDOPADSInstance, load_CEDOPADS_instances, CEDOPADSRoute, CEDOPADSNode, Visit, UtilityFunction, utility_fixed_optical
 import matplotlib.pyplot as plt
-from typing import Optional, Set, List, Dict, Tuple
-from classes.data_types import State, Position, Dir, compute_difference_between_angles
+from typing import Optional, Set, List, Dict, Tuple, Iterator
+from classes.data_types import State, Position, Dir, compute_difference_between_angles, Angle
 from library.core.dubins.dubins_api import call_dubins, sample_dubins_path
 from library.core.dubins.relaxed_dubins import compute_length_of_relaxed_dubins_path
 
@@ -28,6 +29,15 @@ def get_samples(problem: CEDOPADSInstance, k: int, i: int) -> List[Tuple[float, 
                         (psi, (psi + np.pi - problem.eta / 2) % (2 * np.pi))])
 
     return samples
+
+def get_equdistant_samples(problem: CEDOPADSInstance, k: int) -> Iterator[Tuple[Angle, Angle, float]]:
+    """Gets equidistant samples (cordinate wise) from within AOA i of node k"""
+    r = sum(problem.sensing_radii) / 2
+    for i in range(len(problem.nodes[k].AOAs)):
+        psis = [(problem.nodes[k].thetas[i] - problem.nodes[k].phis[i] / 4.5) % (2 * np.pi), (problem.nodes[k].thetas[i] + problem.nodes[k].phis[i] / 4.5) % (2 * np.pi)]
+        for psi in psis:
+            yield (k, psi, (psi + np.pi - problem.eta / 4.5) % (2 * np.pi), r)
+            yield (k, psi, (psi + np.pi + problem.eta / 4.5) % (2 * np.pi), r)
 
 def get_close_enough_node_ids(problem: CEDOPADSInstance, unvisited_nodes: Set[int], q0: State, q1: State) -> Set[int]:
     """generate a list of nodes which lies sufficently close to the path segment from q0 to q1, this function is only 
@@ -279,7 +289,7 @@ def remove_visit(route: CEDOPADSRoute, problem_instance: CEDOPADSInstance, utili
                               compute_length_of_relaxed_dubins_path(q.angle_complement(), problem_instance.source, problem_instance.rho) - 
                               compute_length_of_relaxed_dubins_path(q, problem_instance.sink, problem_instance.rho))
 
-        return ([], change_in_distance, -problem_instance.compute_score_of_visit(route[0]))
+        return ([], change_in_distance, -problem_instance.compute_score_of_visit(route[0], utility_function))
 
     for idx, visit in enumerate(route):
         # Check if visit at index idx should be skiped.
