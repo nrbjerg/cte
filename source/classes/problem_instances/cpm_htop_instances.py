@@ -194,7 +194,7 @@ class CPM_HTOP_Instance:
         plt.scatter(*self.source.pos, 120, marker = "s", c = "black", zorder=10)
         plt.scatter(*self.sink.pos, 120, marker = "^", c = "black", zorder=10)
 
-        plt.title(f"CPM-HTOP: {self.problem_id}")
+        #plt.title(f"CPM-HTOP: {self.problem_id}")
         if plot_nodes:
             sizes = [node.size for node in self.nodes[1:-1]] 
             plt.scatter([node.pos[0] for node in self.nodes[1:-1]], [node.pos[1] for node in self.nodes[1:-1]], sizes, c = "tab:gray", zorder=2)
