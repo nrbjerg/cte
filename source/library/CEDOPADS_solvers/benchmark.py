@@ -8,6 +8,7 @@ from library.CEDOPADS_solvers.greedy import greedy
 from library.CEDOPADS_solvers.memetic import GA
 import multiprocessing
 from classes.problem_instances.cedopads_instances import CEDOPADSInstance, utility_fixed_optical, UtilityFunction, load_CEDOPADS_instances
+from library.CEDOPADS_solvers.local_search_operators import add_free_visits
 from classes.data_types import Vector
 import datetime
 import numpy as np 
@@ -18,14 +19,11 @@ def worker_function_GA(args: Tuple[int, float, CEDOPADSInstance]) -> Tuple[Vecto
     number_of_repetitions, time_budget, problem_instance = args
     utility_function = utility_fixed_optical
     ga = GA(problem_instance, utility_function, mu = 512, lmbda=512 * 7)
-    parent_selection = ga.sigma_scaling
-    crossover_operator = ga.unidirectional_greedy_crossover
-    survivor_selection_operator = ga.mu_comma_lambda_selection
-    routes = [ga.run(time_budget, 3, parent_selection, crossover_operator, survivor_selection_operator) for _ in range(number_of_repetitions)]
+    routes = [ga.run(time_budget) for _ in range(number_of_repetitions)]
     
     # Should simply return the results from the algorithm.
-    info = f"Memetic {utility_function=}, {parent_selection=}, {crossover_operator=}, {survivor_selection_operator=}, {time_budget=}, {number_of_repetitions=}"
-    return (np.array([problem_instance.compute_score_of_route(route, utility_function) for route in routes]), info)
+    info = f"Memetic {utility_function=}, {time_budget=}, {number_of_repetitions=}"
+    return (np.array([problem_instance.compute_score_of_route(add_free_visits(problem_instance, route, utility_function), utility_function) for route in routes]), info)
 
 def worker_function_grasp(args: Tuple[int, float, CEDOPADSInstance]) -> Tuple[Vector, str]:
     """The actual function which calls the GRASP and generates the results"""
@@ -59,7 +57,7 @@ def quick_benchmark(k: int = 14, number_of_repetitions: int = 10, time_budget: f
     problem_instances = random.sample(load_CEDOPADS_instances(), k)
 
     with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
-        output = p.map(worker_function_grasp, [(number_of_repetitions, time_budget, problem_instance) for problem_instance in problem_instances])
+        output = p.map(worker_function_GA, [(number_of_repetitions, time_budget, problem_instance) for problem_instance in problem_instances])
 
         #logger.info(f"Problems: {[problem_instance.problem_id for problem_instance in problem_instances]}")
         for i, (result, info) in enumerate(output):
