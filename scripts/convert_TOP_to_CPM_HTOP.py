@@ -1,17 +1,18 @@
-#%%
 #!/usr/bin/env python3
 import numpy as np
 from classes.problem_instances.top_instances import TOPInstance, load_TOP_instances
-import gstools as gs
 import os
 from scipy.stats import multivariate_normal
 import matplotlib.pyplot as plt 
+import matplotlib as mpl
 from tqdm import tqdm
 
 path_to_TOP_instances = os.path.join(os.getcwd(), "resources", "TOP")
 path_to_CPM_HTOP_instances = os.path.join(os.getcwd(), "resources", "CPM_HTOP")
 
-for idx, file_id in tqdm(enumerate(list(os.listdir(path_to_TOP_instances)))):
+plotted = False
+
+for idx, file_id in tqdm(enumerate(sorted(os.listdir(path_to_TOP_instances)))):
     # Load data 
     np.random.seed(idx)
     with open(os.path.join(path_to_TOP_instances, file_id), "r") as file:
@@ -21,17 +22,20 @@ for idx, file_id in tqdm(enumerate(list(os.listdir(path_to_TOP_instances)))):
 
     # Compute risk matrix
     positions = list(map(lambda line: np.array(list(map(float, line.split()))[:-1]), lines[3:]))
+    scores = list(map(lambda line: float(line.split()[-1]), lines[4:-1]))
     N = len(positions)
-    m = int(np.floor((N - 2) / 4))
+    m = int(np.round((N - 2) / 3))
+    print(m)
 
     x_max, x_min = max(map(lambda p: p[0], positions)), min(map(lambda p: p[0], positions))
     y_max, y_min = max(map(lambda p: p[1], positions)), min(map(lambda p: p[1], positions))
 
-    
     means = np.vstack((np.random.uniform(x_min, x_max, size=m), np.random.uniform(y_min, y_max, size=m)))
 
-    sigma_xs, sigma_ys = np.random.lognormal(2, 0.7, size=m), np.random.lognormal(2, 0.7, size = m)
-    rhos = np.random.uniform(-0.5, 0.5, size = m)
+    sigma_xs, sigma_ys = (x_max - x_min) / 8 * np.random.uniform(0.5, 1, size = m), (y_max - y_min) / 8 * (np.random.uniform(0.5, 1, size = m))  
+
+    #sigma_xs, sigma_ys = np.random.exponential(2, 0.7, size=m), np.random.lognormal(2, 0.7, size = m)
+    rhos = 2 * (np.random.beta(3, 3, size = m) - 0.5) 
 
     covariances = [np.array([[sigma_x ** 2, rho * sigma_x * sigma_y],
                              [rho * sigma_x * sigma_y, sigma_y ** 2]]) 
@@ -40,6 +44,30 @@ for idx, file_id in tqdm(enumerate(list(os.listdir(path_to_TOP_instances)))):
     distributions = [multivariate_normal(mean, cov) for mean, cov in zip(means.T, covariances)]
 
     f = lambda x: sum(distribution.pdf(x) for distribution in distributions)
+
+    # Plot the contour plot of a single f:
+    if not plotted:
+        plt.rcParams['figure.figsize'] = [12, 9]
+        plt.style.use("seaborn-v0_8-whitegrid")
+        plt.gca().set_aspect("equal", adjustable="box")
+        xs = np.linspace(-0.5, 30.5, 200)
+        ys = np.linspace(-0.5, 30.5, 200)
+        zs = np.array([[f([x, y]) for x in xs] for y in ys])
+        c_map = mpl.colors.LinearSegmentedColormap.from_list("", ["tab:green", "tab:blue", "tab:purple", "tab:red"])
+        plt.contour(xs, ys, zs, levels=16, cmap=c_map, zorder=1)
+        plt.colorbar(mpl.cm.ScalarMappable(norm=plt.Normalize(0, 0.084), cmap=c_map), ax=plt.gca())
+        min_score = min(scores) 
+        max_score = max(scores) 
+        for pos, s in zip(positions[1:-1], scores):
+            plt.scatter(pos[0], pos[1], (0.2 + (s - min_score) / (max_score - min_score)) * 120, color="tab:gray", zorder=2)
+
+        plt.scatter(*positions[0], 120, marker = "s", c = "black", zorder=10)
+        plt.scatter(*positions[-1], 120, marker = "d", c = "black", zorder=10)
+        plt.title(f"TOP Instance: {file_id[:-4]}")
+        plotted = True
+        plt.ylim(-0.5, 30.5)
+        plt.xlim(-0.5, 30.5)
+        plt.savefig("from_generation.png", bbox_inches="tight")
 
     omegas = np.zeros(shape=(N, N))
     for i in range(N):
@@ -67,12 +95,10 @@ for idx, file_id in tqdm(enumerate(list(os.listdir(path_to_TOP_instances)))):
             heat_map[i, j] = f([x, y])
 
     t_max = float(info[-1].split(" ")[-1])
-    short_distance, medium_distance, long_distance = round(1.2 * t_max, 4), round(1.4 * t_max, 4), round(1.6 * t_max, 4)
-    slow, medium, fast = (1.2, 0.8), (1.4, 1), (1.6, 1.2)
 
-    for idx, (speed, minimum_turning_radius) in enumerate([slow, medium, fast]):
-        for jdx, distance in enumerate([short_distance, medium_distance, long_distance]):
-            cpm_info = f"\nVcpm {speed}\nR {minimum_turning_radius}\ndmax {distance}\n"
+    for idx, velocity in enumerate([1.4, 1.6, 1.8]):
+        for jdx, distance in enumerate([0.6 * t_max, 0.7 * t_max, 0.8 * t_max]):
+            cpm_info = f"\nVcpm {velocity}\ndmax {distance}\n"
 
             new_file_id = ".".join(file_id.split(".")[:-1]) + f".{idx * 3 + jdx}.txt"
             with open(os.path.join(path_to_CPM_HTOP_instances, new_file_id), "w+") as new_file:
