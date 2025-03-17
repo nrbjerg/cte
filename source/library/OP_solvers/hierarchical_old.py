@@ -143,7 +143,6 @@ class OPInstance:
             #colors = ["tab:blue", "tab:green", "tab:red", "tab:brown", "tab:pink"] # TODO: add extra colors
             return OPInstance(file_name[:-4], t_max, source, sink, nodes)
 
-
     @staticmethod
     def generate_instance(n: int) -> OPInstance:
         """Generates an OP instance with n nodes."""

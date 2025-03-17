@@ -83,7 +83,7 @@ class EuclidianInterceptionRoute(InterceptionRoute):
         ys = [self.initial_position[1]] + [point[1] for point in self.interception_points] + [self.terminal_position[1]]
 
         plt.plot(xs, ys, c=c, zorder=zorder)
-        plt.scatter(xs[1:-1], ys[1:-1], marker="D", c=c, zorder=zorder) # NOTE: Skip the first and final points (that is the source and sink!)
+        plt.scatter(xs[1:-1], ys[1:-1], marker="P", s = 80, c=c, zorder=zorder) # NOTE: Skip the first and final points (that is the source and sink!)
         if show:
             plt.show()
 
