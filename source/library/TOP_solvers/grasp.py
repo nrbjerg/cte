@@ -213,7 +213,27 @@ def grasp(problem: TOPInstance, time_budget: int, p: float, use_centroids: bool 
 if __name__ == "__main__":
     top_instance = load_TOP_instances(needs_plotting = True, neighbourhood_level=1)[0]
     print("Running Algorithm")
-    routes = grasp(top_instance, p = 0.7, time_budget = 60, use_centroids = True)
+    routes = grasp(top_instance, p = 0.7, time_budget = 10, use_centroids = True)
     print(routes, sum(route.score for route in routes))
+
+    from shapely.geometry import LineString, Point
+    from shapely.plotting import plot_polygon
+    from shapely import contains_xy
+
+    search_areas = []
+    for color, route in zip(top_instance._colors, routes):
+        line = LineString([node.pos for node in route.nodes])
+        search_areas.append(line.buffer(1, cap_style=1, join_style=1, resolution = 4))
+        plot_polygon(search_areas[-1], add_points = False, color=color, alpha = 0.3)
+
     print("Finished Algorithm")
     top_instance.plot_with_routes(routes, plot_points=True)
+
+    N = 10_000
+    points = np.random.uniform(0, 30, size=(N, 2)) 
+
+    start_time = time.time()
+    total_search_area = search_areas[0].union(search_areas[1]).union(search_areas[2])
+    print(f"Total Ratio of area {total_search_area.area / (30 * 30)}")
+    print(f"Probability of a point being within the search area {sum(contains_xy(total_search_area, points[:, 0], points[:, 1])) / N}")
+    print(f"Ending time {time.time() - start_time}")
