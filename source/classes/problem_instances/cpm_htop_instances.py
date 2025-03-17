@@ -6,7 +6,6 @@ import numpy as np
 from numpy.typing import ArrayLike
 from scipy.spatial import Delaunay
 from classes.node import Node, populate_costs
-from classes.cpm_route import CPM_Route
 import os
 from matplotlib import pyplot as plt
 from classes.route import Route
@@ -97,7 +96,7 @@ class CPM_HTOP_Instance:
 
             nodes = []
             risk_matrix = np.zeros(shape=(N, N))
-            for node_id, (x_pos, y_pos, score, *risks) in enumerate(map(lambda line: tuple(map(float, line.split(" "))), lines[6:])):
+            for node_id, (x_pos, y_pos, score, *risks) in enumerate(map(lambda line: tuple(map(float, line.split(" "))), lines[5:])):
                 risk_matrix[node_id] = risks
                 pos = np.array([x_pos, y_pos])
                 nodes.append(Node(node_id, [], pos, score))
@@ -172,7 +171,7 @@ class CPM_HTOP_Instance:
 
     def plot (self, show: bool = True, plot_nodes: bool = True, edges_to_exclude: Set[Tuple[int, int]] = set()):
         """Displays a plot of the problem instance, along with its delauney triangulation"""
-        plt.style.use("bmh")
+        plt.style.use("seaborn-v0_8-whitegrid")
         plt.gca().set_aspect("equal", adjustable="box")
 
         edges_plotted = set()
@@ -184,21 +183,24 @@ class CPM_HTOP_Instance:
 
                 plt.plot([node.pos[0],adjacent_node.pos[0]], [node.pos[1], adjacent_node.pos[1]], 
                          c= "tab:gray", 
-                         linewidth=20 * (0.005 + self.risk_matrix[node.node_id, adjacent_node.node_id]),
-                         alpha=0.25 + 3 * self.risk_matrix[node.node_id, adjacent_node.node_id], zorder=1)
+                         linewidth=20 * (0.01 + self.risk_matrix[node.node_id, adjacent_node.node_id]),
+                         zorder=1)
 
                 # Don't plot the edge going in the opisite direction
                 edges_plotted.add((adjacent_node.node_id, node.node_id)) 
 
         # Plot nodes
         plt.scatter(*self.source.pos, 120, marker = "s", c = "black", zorder=10)
-        plt.scatter(*self.sink.pos, 120, marker = "^", c = "black", zorder=10)
+        plt.scatter(*self.sink.pos, 120, marker = "d", c = "black", zorder=10)
 
         #plt.title(f"CPM-HTOP: {self.problem_id}")
         if plot_nodes:
             sizes = [node.size for node in self.nodes[1:-1]] 
             plt.scatter([node.pos[0] for node in self.nodes[1:-1]], [node.pos[1] for node in self.nodes[1:-1]], sizes, c = "tab:gray", zorder=2)
-
+            
+        plt.ylim(-0.5, 30.5)
+        plt.xlim(-0.5, 30.5)
+        plt.title(f"CPM-RTOP Instance: {self.problem_id}")
         if show:
             plt.show()
 
@@ -237,13 +239,13 @@ class CPM_HTOP_Instance:
     def plot_CPM_HTOP_solution(self, routes: List[Route], cpm_route: InterceptionRoute, cpm_route_color: str = "tab:purple", show: bool = True):
         """Plots a CPM-HTOP solution, ie. a set of UAV routes and a CPM route"""
         self.plot_with_routes(routes, plot_points=True, show=False)
-        cpm_route.plot(show=False)
+        cpm_route.plot(c = cpm_route_color,show=False)
 
         scores = compute_CPM_HTOP_scores(self, routes, cpm_route)
 
         
         indicators = [mlines.Line2D([], [], color=color, label=f"UAV {idx}: {round(score, 2)}", marker="o") for idx, (score, color) in enumerate(zip(scores[:-1], self._colors))]
-        indicators.append(mlines.Line2D([], [], color=cpm_route_color, label=f"CPM: {round(scores[-1], 2)}", marker="D"))
+        indicators.append(mlines.Line2D([], [], color=cpm_route_color, label=f"CPM: {round(scores[-1], 2)}", marker="P"))
         plt.legend(handles=indicators, loc=1)
 
         if show:
