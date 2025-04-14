@@ -3,12 +3,12 @@ from typing import Tuple
 import random
 import os 
 import logging
-from library.CEDOPADS_solvers.grasp import grasp
+from library.CEDOPADS_solvers.grasp import GRASP
 from library.CEDOPADS_solvers.greedy import greedy
 from library.CEDOPADS_solvers.memetic import GA
 import multiprocessing
 from classes.problem_instances.cedopads_instances import CEDOPADSInstance, utility_fixed_optical, UtilityFunction, load_CEDOPADS_instances
-from library.CEDOPADS_solvers.local_search_operators import add_free_visits
+from library.CEDOPADS_solvers.local_search_operators import add_free_visits, get_samples
 from classes.data_types import Vector
 import datetime
 import numpy as np 
@@ -29,8 +29,9 @@ def worker_function_grasp(args: Tuple[int, float, CEDOPADSInstance]) -> Tuple[Ve
     """The actual function which calls the GRASP and generates the results"""
     number_of_repetitions, time_budget, problem_instance = args
     utility_function = utility_fixed_optical
-    p = 0.9
-    routes = [grasp(problem_instance, time_budget, p, utility_function) for _ in range(number_of_repetitions)]
+    grasp = GRASP(problem_instance, utility_function)
+    p = 0.95
+    routes = [grasp.run(time_budget, p, get_samples) for _ in range(number_of_repetitions)]
     
     # Should simply return the results from the algorithm.
     info = f"GRASP: {utility_function=}, {p=}, {time_budget=}, {number_of_repetitions=}"
@@ -57,7 +58,7 @@ def quick_benchmark(k: int = 14, number_of_repetitions: int = 10, time_budget: f
     problem_instances = random.sample(load_CEDOPADS_instances(), k)
 
     with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
-        output = p.map(worker_function_GA, [(number_of_repetitions, time_budget, problem_instance) for problem_instance in problem_instances])
+        output = p.map(worker_function_grasp, [(number_of_repetitions, time_budget, problem_instance) for problem_instance in problem_instances])
 
         #logger.info(f"Problems: {[problem_instance.problem_id for problem_instance in problem_instances]}")
         for i, (result, info) in enumerate(output):
