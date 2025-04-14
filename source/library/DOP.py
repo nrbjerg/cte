@@ -13,11 +13,11 @@ import hashlib
 from tqdm import tqdm
 import itertools
 import matplotlib.pyplot as plt
-from numba import njit
+from numba import #njit
 from scipy.stats import truncnorm
 from library.CEDOPADS_solvers.local_search_operators import remove_visit, greedily_add_visits_while_posible, add_free_visits, get_equdistant_samples
 
-@njit()
+#@njit()
 def compute_sdr_tensor(positions: Matrix, scores: ArrayLike, c_s: float, c_d: float) -> ArrayLike:
     """Computes a tensor consisting of all of the distances between the nodes"""
     n = positions.shape[0] - 2
