@@ -10,7 +10,6 @@ import numpy as np
 from matplotlib import pyplot as plt 
 import matplotlib.lines as mlines
 from library.core.dubins.relaxed_dubins import compute_relaxed_dubins_path, compute_length_of_relaxed_dubins_path
-from numba import njit
 
 plt.rcParams['figure.figsize'] = [9, 9]
 
@@ -40,7 +39,7 @@ def utility_baseline (base_line_score: float, theta: Angle, phi: Angle, psi: Ang
 Visit = Tuple[int, Angle, Angle, float]
 CEDOPADSRoute = List[Visit] # a list of tuples of the form (k, psi, tau, r)
 
-@njit()
+#@njit()
 def _compute_position(pos: Position, r: float, psi: float) -> Position:
     """Computes the position of the a state, on the angle interval of the node at the given position"""
     return pos + r * np.array([np.cos(psi), np.sin(psi)])
@@ -276,7 +275,7 @@ class CEDOPADSInstance:
         k, psi, tau, r = visit
         return self.nodes[k].compute_score(psi, tau, r, self.eta, utility_function)
 
-    def compute_scores_along_route(self, route: CEDOPADSRoute, utility_function: UtilityFunction) -> Dict[int, float]:
+    def compute_scores_along_route(self, route: CEDOPADSRoute, utility_function: UtilityFunction) -> List[float]:
         """Computes the scores along the route and returns them in a dictionary, with the indicies as keys."""
         return [self.compute_score_of_visit(visit, utility_function) for visit in route]
 

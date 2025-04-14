@@ -18,7 +18,7 @@ Vector = ArrayLike
 
 Angle = float
 
-@nb.njit()
+#@nb.#njit()
 def compute_difference_between_angles(a: Angle, b: Angle) -> Angle:
     """Computes the difference in radians between a and b"""
     if a == b:
