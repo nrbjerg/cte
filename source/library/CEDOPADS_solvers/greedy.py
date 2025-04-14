@@ -11,13 +11,15 @@ def greedy(problem: CEDOPADSInstance, utility_function: UtilityFunction, p: floa
     """Runs a greedy algorithm on the problem instance, with initial routes given"""
     remaining_distance = problem.t_max
 
+    r = sum(problem.sensing_radii) / 2
+
     # 1. Pick first visit 
     candidate_visits = {}
     for k in range(len(problem.nodes)):
         for i in range(len(problem.nodes[k].thetas)):
             for j, (psi, tau) in enumerate(get_samples(problem, k, i)):
-                q = problem.get_state((k, psi, tau, problem.sensing_radii[1]))
-                score = problem.compute_score_of_visit((k, psi, tau, problem.sensing_radii[1]), utility_function)
+                q = problem.get_state((k, psi, tau, r))
+                score = problem.compute_score_of_visit((k, psi, tau, r), utility_function)
                 length = compute_length_of_relaxed_dubins_path(q.angle_complement(), problem.source, problem.rho)
                 candidate_visits[(k, i, j)] = score / length
 
@@ -46,8 +48,8 @@ def greedy(problem: CEDOPADSInstance, utility_function: UtilityFunction, p: floa
         for k in unvisited_nodes:
             for i in range(len(problem.nodes[k].thetas)):
                 for j, (psi, tau) in enumerate(get_samples(problem, k, i)):
-                    q = problem.get_state((k, psi, tau, problem.sensing_radii[1]))
-                    score = problem.compute_score_of_visit((k, psi, tau, problem.sensing_radii[1]), utility_function)
+                    q = problem.get_state((k, psi, tau, r))
+                    score = problem.compute_score_of_visit((k, psi, tau, r), utility_function)
                     length = dubins.shortest_path(tail.to_tuple(), q.to_tuple(), problem.rho).path_length()
                     #length = dubins.shortest_path(tail.to_tuple(), q.to_tuple(), problem.rho).path_legnth()
                     if length + compute_length_of_relaxed_dubins_path(q, problem.sink, problem.rho) < remaining_distance:
@@ -65,7 +67,7 @@ def greedy(problem: CEDOPADSInstance, utility_function: UtilityFunction, p: floa
         rcl = [tup[0] for tup in sorted(candidate_visits.items(), key = lambda tup: tup[1], reverse=True)[:number_of_nodes]] 
         k, i, j = rcl[np.random.randint(0, len(rcl))]
         psi, tau = get_samples(problem, k, i)[j]
-        route.append((k, psi, tau, problem.sensing_radii[1]))
+        route.append((k, psi, tau, r))
         unvisited_nodes.remove(k)
         q = problem.get_state(route[-1])
         remaining_distance -= dubins.shortest_path(tail.to_tuple(), q.to_tuple(), problem.rho).path_length()

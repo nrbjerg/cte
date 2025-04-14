@@ -10,30 +10,29 @@ from library.core.dubins.relaxed_dubins import compute_length_of_relaxed_dubins_
 import dubins 
 import numpy as np 
 
-def get_samples(problem: CEDOPADSInstance, k: int, i: int) -> List[Tuple[float, float]]:
+def get_samples(problem: CEDOPADSInstance, k: int) -> Iterator[Tuple[Angle, Angle, float]]:
     """Generate the samples for the i'th angle interval of the k'th target."""
-    theta, phi = problem.nodes[k].thetas[i], problem.nodes[k].phis[i]
+    r = sum(problem.sensing_radii) / 2
 
-    samples = []
-    if phi <= np.pi / 2:
-        psis = [theta, (theta + phi / 3) % (2 * np.pi), (theta - phi / 3) % (2 * np.pi)]
-    else: #phi <= 2 * np.pi / 3:
-        psis = [theta, (theta + phi / 4) % (2 * np.pi), (theta - phi / 4) % (2 * np.pi),
-                       (theta + phi / 2) % (2 * np.pi), (theta - phi / 2) % (2 * np.pi)]
+    for theta, phi in zip(problem.nodes[k].thetas, problem.nodes[k].phis):
+        if phi <= np.pi / 2:
+            psis = [theta, (theta + phi / 3) % (2 * np.pi), (theta - phi / 3) % (2 * np.pi)]
+        else: #phi <= 2 * np.pi / 3:
+            psis = [theta, (theta + phi / 4) % (2 * np.pi), (theta - phi / 4) % (2 * np.pi),
+                           (theta + phi / 2) % (2 * np.pi), (theta - phi / 2) % (2 * np.pi)]
     
-    for psi in psis:
-        samples.extend([(psi, (psi + np.pi) % (2 * np.pi)), 
-                        (psi, (psi + np.pi + problem.eta / 4) % (2 * np.pi)), 
-                        (psi, (psi + np.pi - problem.eta / 4) % (2 * np.pi)),
-                        (psi, (psi + np.pi + problem.eta / 2) % (2 * np.pi)),
-                        (psi, (psi + np.pi - problem.eta / 2) % (2 * np.pi))])
-
-    return samples
+        for psi in psis:
+            yield (psi, (psi + np.pi) % (2 * np.pi))
+            yield (psi, (psi + np.pi + problem.eta / 4) % (2 * np.pi))
+            yield (psi, (psi + np.pi - problem.eta / 4) % (2 * np.pi))
+            #yield (psi, (psi + np.pi + problem.eta / 3) % (2 * np.pi))
+            #yield (psi, (psi + np.pi - problem.eta / 3) % (2 * np.pi))
 
 def get_equdistant_samples(problem: CEDOPADSInstance, k: int) -> Iterator[Tuple[Angle, Angle, float]]:
     """Gets equidistant samples (cordinate wise) from within AOA i of node k"""
     r = sum(problem.sensing_radii) / 2
     for i in range(len(problem.nodes[k].AOAs)):
+        #yield (k, problem.nodes[k].thetas[i], (problem.nodes[k].thetas[i] + np.pi) % (2 * np.pi), r)
         psis = [(problem.nodes[k].thetas[i] - problem.nodes[k].phis[i] / 4.5) % (2 * np.pi), (problem.nodes[k].thetas[i] + problem.nodes[k].phis[i] / 4.5) % (2 * np.pi)]
         for psi in psis:
             yield (k, psi, (psi + np.pi - problem.eta / 4.5) % (2 * np.pi), r)

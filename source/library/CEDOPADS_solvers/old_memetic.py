@@ -13,11 +13,11 @@ import hashlib
 from tqdm import tqdm
 import itertools
 import matplotlib.pyplot as plt
-from numba import njit
+from numba import #njit
 from scipy.stats import truncnorm
 from library.CEDOPADS_solvers.local_search_operators import remove_visit, greedily_add_visits_while_posible, add_free_visits, get_equdistant_samples
 
-@njit()
+#@njit()
 def compute_sdr_tensor(positions: Matrix, scores: ArrayLike, c_s: float, c_d: float) -> ArrayLike:
     """Computes a tensor consisting of all of the distances between the nodes"""
     n = positions.shape[0] - 2
@@ -431,7 +431,7 @@ class GA:
 
 if __name__ == "__main__":
     utility_function = utility_baseline
-    problem_instance: CEDOPADSInstance = CEDOPADSInstance.load_from_file("p4.4.f.d.b.txt", needs_plotting = True)
+    problem_instance: CEDOPADSInstance = CEDOPADSInstance.load_from_file("p4.4.g.c.a.txt", needs_plotting = True)
     problem_instance.plot({}, show = True)
     mu = 128
     ga = GA(problem_instance, utility_function, mu = mu, lmbda = mu * 7)
