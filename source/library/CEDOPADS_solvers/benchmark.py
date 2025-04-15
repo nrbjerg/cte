@@ -30,7 +30,7 @@ def worker_function_grasp(args: Tuple[int, float, CEDOPADSInstance]) -> Tuple[Ve
     number_of_repetitions, time_budget, problem_instance = args
     utility_function = utility_fixed_optical
     grasp = GRASP(problem_instance, utility_function)
-    p = 0.95
+    p = 0.99
     routes = [grasp.run(time_budget, p, get_samples) for _ in range(number_of_repetitions)]
     
     # Should simply return the results from the algorithm.
