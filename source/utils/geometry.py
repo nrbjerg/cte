@@ -4,7 +4,7 @@ import numpy as np
 import numba as nb
 
 # Shamelessly grabed from https://stackoverflow.com/questions/55816902/finding-the-intersection-of-two-circles 
-#@nb.#njit()
+@nb.njit()
 def get_intersection_points_between_circles(c1: Position, r1: float, c2: Position, r2: float) -> Tuple[Position, Position]:
     """Computes the intersection points of two circles with centers at c1 and c2 and radiis of r1 and r2 respectively."""
     d = np.linalg.norm(c1 - c2)

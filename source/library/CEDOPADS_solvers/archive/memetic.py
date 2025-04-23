@@ -14,7 +14,7 @@ import hashlib
 from tqdm import tqdm
 from itertools import combinations
 import matplotlib.pyplot as plt
-from numba import #njit
+from numba import njit
 from scipy.stats import truncnorm
 from library.CEDOPADS_solvers.local_search_operators import remove_visit, greedily_add_visits_while_posible, add_free_visits
 from dataclasses import dataclass

@@ -227,7 +227,7 @@ def compute_relaxed_dubins_path(q: State, p: Position, rho: float, plot: bool = 
         
     return path
 
-#@nb.#njit()
+@nb.njit()
 def _compute_length_of_relaxed_dubins_path(q_pos: Position, q_angle: Angle, p: Position, rho: float) -> float:
     """A jit compiled function to compute the length of the shortest dubins path from q to p."""
     rotation_angle = np.pi / 2 - q_angle
