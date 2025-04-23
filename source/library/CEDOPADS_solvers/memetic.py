@@ -359,8 +359,8 @@ class GA:
         for i, j in enumerate(indicies):
             
             # Update psi, by skipping to the next aoa clockwise / counter clockwise if we get out of bounds.
-            k = individual.route[j][0]
-            new_psi = individual.route[j][1] + N_psi[i]
+            (k, psi, tau, r) = individual.route[j]
+            new_psi = psi + N_psi[i]
             aoa = self.problem_instance.nodes[k].AOAs[individual.aoa_indicies[j]]
             if not aoa.contains_angle(new_psi):
                 # Move counterclockwise if N_psi > 0 and clockwise otherwise.
@@ -371,25 +371,33 @@ class GA:
                 # Pick the angle closest to the original angle, from the new aoa
                 if change_in_aoa_idx == 1:
                     if new_aoa.a < new_aoa.b:
-                        new_psi = new_aoa.a 
+                        new_psi = new_aoa.a
+                        delta_psi = new_psi - psi
+
                     else:
                         new_psi = new_aoa.b
+                        delta_psi = psi - (2 * np.pi + new_psi)
 
                 else:
                     if new_aoa.a < new_aoa.b:
                         new_psi = new_aoa.b
+                        delta_psi = new_psi - psi
+
                     else:
                         new_psi = new_aoa.a
+                        delta_psi = psi - (2 * np.pi + new_psi)
+
+            else:
+                delta_psi = N_psi[i]
 
             # Update tau but make sure that target k remains within the observation cone
-            new_tau = (individual.route[j][2] + N_tau[i] + N_psi[i]) % (2 * np.pi)
+            new_tau = (tau + N_tau[i] + delta_psi) % (2 * np.pi)
             if compute_difference_between_angles(new_tau, (new_psi + np.pi) % (2 * np.pi)) > self.problem_instance.eta / 2:
-                # For now simply compute a new tau entierly TODO
-                new_tau = (individual.route[j][2] + N_psi[i]) % (2 * np.pi) 
-                #new_tau = (new_psi + np.pi + truncnorm.rvs((-self.problem_instance.eta / 2) / 0.01, (self.problem_instance.eta / 2) / 0.01, loc = 0, scale = 0.01)) % (2 * np.pi)
+                # If this is not the case, simply move tau the same amount as N_tau.
+                new_tau = (tau + delta_psi) % (2 * np.pi) 
 
             # Update r but make sure that it remains within the interval [r_min; r_max]
-            new_r = max(min(individual.route[j][3] + N_r[i], self.problem_instance.sensing_radii[0]), self.problem_instance.sensing_radii[1])
+            new_r = max(min(r + N_r[i], self.problem_instance.sensing_radii[0]), self.problem_instance.sensing_radii[1])
 
             individual.route[j] = (k, new_psi, new_tau, new_r)
             individual.states[j] = self.problem_instance.get_state(individual.route[j])
@@ -549,15 +557,19 @@ class GA:
         inverse_sdr_scores = np.array([(in_bound_dist + out_bound_dist) / (score + 0.001) for score, in_bound_dist, out_bound_dist in zip(individual.scores, individual.segment_lengths[:-1], individual.segment_lengths[1:])])
         inverse_ratio_of_maximal_scores = np.array([self.problem_instance.nodes[k].base_line_score / (score + 0.001) for score, (k, _, _, _) in zip(individual.scores, individual.route)])
 
-        for _ in range(n_iterations):
+        for i in range(n_iterations):
             # We want to pick the visits with either the lowest score ratio (i.e. the visits where the score can be increased the most or the visits where the SDR score is lowest)
             probs = (inverse_ratio_of_maximal_scores / np.sum(inverse_ratio_of_maximal_scores) + (inverse_sdr_scores / np.sum(inverse_sdr_scores))) / 2
+            if any([p < 0 for p in probs]):
+                print(i, probs, individual.scores)
+
             idx = np.random.choice(len(individual), p = probs)
             (k, psi, tau, r) = individual.route[idx]
 
             for _ in range(maximum_number_of_attemps):
                 # Generate new psi, tau & r
                 N_psi = np.random.normal(0, scale = individual.psi_mutation_step_sizes[idx])
+                N_tau = np.random.normal(0, scale = individual.tau_mutation_step_sizes[idx])
                 new_psi = psi + N_psi
                 aoa = self.problem_instance.nodes[k].AOAs[individual.aoa_indicies[idx]]
                 if not aoa.contains_angle(new_psi):
@@ -569,24 +581,29 @@ class GA:
                     # Pick the angle closest to the original angle, from the new aoa
                     if change_in_aoa_idx == 1:
                         if new_aoa.a < new_aoa.b:
-                            new_psi = new_aoa.a 
+                            new_psi = new_aoa.a
+                            delta_psi = new_psi - psi
                         else:
                             new_psi = new_aoa.b
+                            delta_psi = psi - (2 * np.pi + new_psi)
 
                     else:
                         if new_aoa.a < new_aoa.b:
                             new_psi = new_aoa.b
+                            delta_psi = new_psi - psi 
+
                         else:
                             new_psi = new_aoa.a
+                            delta_psi = psi - (2 * np.pi + new_psi)
+
                 else:
                     new_aoa_index = None
+                    delta_psi = N_psi
 
-                # Update tau but make sure that target k remains within the observation cone
-
-                new_tau = (tau + np.random.normal(0, individual.tau_mutation_step_sizes[idx]) + N_psi) % (2 * np.pi)
+                new_tau = (tau + N_tau + delta_psi) % (2 * np.pi)
                 if compute_difference_between_angles(new_tau, (new_psi + np.pi) % (2 * np.pi)) > self.problem_instance.eta / 2:
-                    new_tau = tau + N_psi 
-                    #new_tau = (new_psi + np.pi + truncnorm.rvs((-self.problem_instance.eta / 2) / 0.01, (self.problem_instance.eta / 2) / 0.01, loc = 0, scale = 0.01)) % (2 * np.pi)
+                    # If this is not the case, simply move tau the same amount as N_tau.
+                    new_tau = (tau + delta_psi) % (2 * np.pi) 
 
                 # Update r but make sure that it remains within the interval [r_min; r_max]
                 new_r = max(min(r + np.random.normal(0, individual.r_mutation_step_sizes[idx]), self.problem_instance.sensing_radii[0]), self.problem_instance.sensing_radii[1])
@@ -815,7 +832,7 @@ class GA:
 if __name__ == "__main__":
     utility_function = utility_fixed_optical
     problem_instance: CEDOPADSInstance = CEDOPADSInstance.load_from_file("p4.4.g.c.a.txt", needs_plotting = True)
-    mu = 128
+    mu = 256
     ga = GA(problem_instance, utility_function, mu = mu, lmbda = mu * 7, xi = int(np.floor(mu / 4)))
     #import cProfile
     #cProfile.run("ga.run(300, display_progress_bar = True)", sort = "cumtime")
