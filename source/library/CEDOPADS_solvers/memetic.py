@@ -369,23 +369,8 @@ class GA:
                 new_aoa = self.problem_instance.nodes[k].AOAs[individual.aoa_indicies[j]]
 
                 # Pick the angle closest to the original angle, from the new aoa
-                if change_in_aoa_idx == 1:
-                    if new_aoa.a < new_aoa.b:
-                        new_psi = new_aoa.a
-                        delta_psi = new_psi - psi
-
-                    else:
-                        new_psi = new_aoa.b
-                        delta_psi = psi - (2 * np.pi + new_psi)
-
-                else:
-                    if new_aoa.a < new_aoa.b:
-                        new_psi = new_aoa.b
-                        delta_psi = new_psi - psi
-
-                    else:
-                        new_psi = new_aoa.a
-                        delta_psi = psi - (2 * np.pi + new_psi)
+                new_psi = new_aoa.a if change_in_aoa_idx == 1 else new_aoa.b
+                delta_psi = new_psi - psi
 
             else:
                 delta_psi = N_psi[i]
@@ -579,22 +564,8 @@ class GA:
                     new_aoa = self.problem_instance.nodes[k].AOAs[new_aoa_index]
 
                     # Pick the angle closest to the original angle, from the new aoa
-                    if change_in_aoa_idx == 1:
-                        if new_aoa.a < new_aoa.b:
-                            new_psi = new_aoa.a
-                            delta_psi = new_psi - psi
-                        else:
-                            new_psi = new_aoa.b
-                            delta_psi = psi - (2 * np.pi + new_psi)
-
-                    else:
-                        if new_aoa.a < new_aoa.b:
-                            new_psi = new_aoa.b
-                            delta_psi = new_psi - psi 
-
-                        else:
-                            new_psi = new_aoa.a
-                            delta_psi = psi - (2 * np.pi + new_psi)
+                    new_psi = new_aoa.a if change_in_aoa_idx == 1 else new_aoa.b
+                    delta_psi = new_psi - psi
 
                 else:
                     new_aoa_index = None
@@ -778,7 +749,7 @@ class GA:
                     parent_indicies = self.stochastic_universal_sampling(cdf, m = 2)
                     parents = [self.population[i] for i in parent_indicies]
                     for child in self.partially_mapped_crossover(parents):
-                        mutated_child, indicies_to_skip = self.mutate(child, p = 0.1, q = 0.3) # NOTE: we need this deepcopy!
+                        mutated_child, indicies_to_skip = self.mutate(child, p = 0.1, q = 0.3) 
                         fixed_mutated_child = self.fix_length_optimized(self.optimize_visits(mutated_child), indicies_to_skip) 
                         offspring.append(fixed_mutated_child)
                 
@@ -786,7 +757,6 @@ class GA:
                     parents_to_be_mutated = [self.population[i] for i in self.stochastic_universal_sampling(cdf, self.xi)]
                     for parent in parents_to_be_mutated:
                         mutated_parent = self.non_self_adaptive_scalar_mutation(parent)
-                        #mutated_parent = self.self_adaptive_scalar_mutation(parent, 0.001) 
                         fixed_mutated_parent = self.fix_length_optimized(self.optimize_visits(mutated_parent), []) 
                         offspring.append(fixed_mutated_parent)
 
