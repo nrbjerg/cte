@@ -250,7 +250,66 @@ class GA:
 
         # Finally we perform multiple angle mutations
         #return self.non_self_adaptive_scalar_mutation(individual), indicies_to_skip
-        return self.self_adaptive_scalar_mutation(individual, eps), indicies_to_skip
+        return self.self_adaptive_scalar_mutation(individual), indicies_to_skip
+
+    def pick_best_explored_visit_based_on_sdr(self, route: CEDOPADSRoute, i: int, k: int) -> Tuple[Visit, float, float]:
+        """Picks the best visit to node k based on the SDR, by inserting it within path segment i."""
+        best_visit = None
+        score_of_best_visit = None
+        sdr_of_best_visit = 0 
+        # If we have not yet seen the node before, pre compute everything that will be needed.
+        if i == 0:
+            # Compute the original distance before including the visit
+            q = self.problem_instance.get_state(route[0])
+            original_distance = compute_length_of_relaxed_dubins_path(q.angle_complement(), self.problem_instance.source, self.problem_instance.rho)
+            for visit, q_visit, score in zip(self.explored_visits[k], self.explored_states[k], self.explored_scores[k]):
+                # Compute score associated with visit and the distance through the visit
+                distance_through_visit = (compute_length_of_relaxed_dubins_path(q_visit.angle_complement(), self.problem_instance.source, self.problem_instance.rho) + 
+                                          dubins.shortest_path(q_visit.to_tuple(), q.to_tuple(), self.problem_instance.rho).path_length())
+
+                if distance_through_visit == original_distance:
+                    return visit, score
+
+                elif (sdr_of_visit := score / (distance_through_visit - original_distance)) > sdr_of_best_visit:
+                    best_visit = visit
+                    sdr_of_best_visit = sdr_of_visit
+                    score_of_best_visit = score
+
+        elif i == len(route):
+            # Compute the original distance before including the visit
+            q = self.problem_instance.get_state(route[-1])
+            original_distance = compute_length_of_relaxed_dubins_path(q, self.problem_instance.sink, self.problem_instance.rho)
+            for visit, q_visit, score in zip(self.explored_visits[k], self.explored_states[k], self.explored_scores[k]):
+                # Compute score associated with visit and the distance through the visit
+                distance_through_visit = (compute_length_of_relaxed_dubins_path(q_visit, self.problem_instance.sink, self.problem_instance.rho) +
+                                          dubins.shortest_path(q.to_tuple(), q_visit.to_tuple(), self.problem_instance.rho).path_length())
+
+                if distance_through_visit == original_distance:
+                    return visit, score
+
+                elif (sdr_of_visit := score / (distance_through_visit - original_distance)) > sdr_of_best_visit:
+                    best_visit = visit
+                    sdr_of_best_visit = sdr_of_visit
+                    score_of_best_visit = score
+
+        else: 
+            # Compute the original distance before including the visit
+            q_i, q_t = self.problem_instance.get_state(route[i - 1]), self.problem_instance.get_state(route[i])
+            original_distance = dubins.shortest_path(q_i.to_tuple(), q_t.to_tuple(), self.problem_instance.rho).path_length()
+            for visit, q_visit, score in zip(self.explored_visits[k], self.explored_states[k], self.explored_scores[k]):
+                # Compute score associated with visit and the distance through the visit
+                distance_through_visit = (dubins.shortest_path(q_i.to_tuple(), q_visit.to_tuple(), self.problem_instance.rho).path_length() + 
+                                          dubins.shortest_path(q_visit.to_tuple(), q_t.to_tuple(), self.problem_instance.rho).path_length())
+
+                if distance_through_visit == original_distance:
+                    return visit, score
+
+                elif (sdr_of_visit := score / (distance_through_visit - original_distance)) > sdr_of_best_visit:
+                    best_visit = visit
+                    sdr_of_best_visit = sdr_of_visit
+                    score_of_best_visit = score
+    
+        return best_visit, sdr_of_best_visit, score_of_best_visit
 
     def pick_visit_to_insert_based_on_SDR (self, route: CEDOPADSRoute, i: int, m: int = 3) -> Tuple[Visit, float]:
         """Picks a new visit to insert based on the SDR scores of each visit of a randomly picked node, which is picked according to the SDR tensor"""
@@ -274,63 +333,10 @@ class GA:
         ks = np.random.choice(self.node_indicies_arrray[self.mask_for_overwrite], size = m, p = probs)
 
         # Find the actual best visit for visiting node k according to the SDR score.
-        best_visit = None
-        score_of_best_visit = None
-        sdr_of_best_visit = 0 
-        for k in ks:
-            # If we have not yet seen the node before, pre compute everything that will be needed.
-            if i == 0:
-                # Compute the original distance before including the visit
-                q = self.problem_instance.get_state(route[0])
-                original_distance = compute_length_of_relaxed_dubins_path(q.angle_complement(), self.problem_instance.source, self.problem_instance.rho)
-                for visit, q_visit, score in zip(self.explored_visits[k], self.explored_states[k], self.explored_scores[k]):
-                    # Compute score associated with visit and the distance through the visit
-                    distance_through_visit = (compute_length_of_relaxed_dubins_path(q_visit.angle_complement(), self.problem_instance.source, self.problem_instance.rho) + 
-                                              dubins.shortest_path(q_visit.to_tuple(), q.to_tuple(), self.problem_instance.rho).path_length())
+        best_visits_and_information = [self.pick_best_explored_visit_based_on_sdr(route, i, k) for k in ks]
 
-                    if distance_through_visit == original_distance:
-                        return visit, score
-
-                    elif (sdr_of_visit := score / (distance_through_visit - original_distance)) > sdr_of_best_visit:
-                        best_visit = visit
-                        sdr_of_best_visit = sdr_of_visit
-                        score_of_best_visit = score
-
-            elif i == len(route):
-                # Compute the original distance before including the visit
-                q = self.problem_instance.get_state(route[-1])
-                original_distance = compute_length_of_relaxed_dubins_path(q, self.problem_instance.sink, self.problem_instance.rho)
-                for visit, q_visit, score in zip(self.explored_visits[k], self.explored_states[k], self.explored_scores[k]):
-                    # Compute score associated with visit and the distance through the visit
-                    distance_through_visit = (compute_length_of_relaxed_dubins_path(q_visit, self.problem_instance.sink, self.problem_instance.rho) +
-                                              dubins.shortest_path(q.to_tuple(), q_visit.to_tuple(), self.problem_instance.rho).path_length())
-
-                    if distance_through_visit == original_distance:
-                        return visit, score
-
-                    elif (sdr_of_visit := score / (distance_through_visit - original_distance)) > sdr_of_best_visit:
-                        best_visit = visit
-                        sdr_of_best_visit = sdr_of_visit
-                        score_of_best_visit = score
-
-            else: 
-                # Compute the original distance before including the visit
-                q_i, q_t = self.problem_instance.get_state(route[i - 1]), self.problem_instance.get_state(route[i])
-                original_distance = dubins.shortest_path(q_i.to_tuple(), q_t.to_tuple(), self.problem_instance.rho).path_length()
-                for visit, q_visit, score in zip(self.explored_visits[k], self.explored_states[k], self.explored_scores[k]):
-                    # Compute score associated with visit and the distance through the visit
-                    distance_through_visit = (dubins.shortest_path(q_i.to_tuple(), q_visit.to_tuple(), self.problem_instance.rho).path_length() + 
-                                              dubins.shortest_path(q_visit.to_tuple(), q_t.to_tuple(), self.problem_instance.rho).path_length())
-
-                    if distance_through_visit == original_distance:
-                        return visit, score
-
-                    elif (sdr_of_visit := score / (distance_through_visit - original_distance)) > sdr_of_best_visit:
-                        best_visit = visit
-                        sdr_of_best_visit = sdr_of_visit
-                        score_of_best_visit = score
-
-        return best_visit, score_of_best_visit
+        idx = np.argmax([sdr for (_, sdr, _) in best_visits_and_information])
+        return best_visits_and_information[idx][0], best_visits_and_information[idx][2]
 
     def self_adaptive_scalar_mutation (self, individual: Individual, eps: float = 0.01, c_psi: float = 1.0, c_tau: float = 1.0, c_r: float = 1.0) -> Individual:
         """Mutates the angles of the individual by sampling from a uniform or trunced normal distribution."""
@@ -391,55 +397,6 @@ class GA:
             individual.segment_lengths = None # Signals that they need to be recomputed.
 
         return individual
-
-    def non_self_adaptive_scalar_mutation(self, individual: Individual) -> Individual:
-        """A non adaptive version of the scalar multiplication"""
-        scale = 0.05 
-
-        # Core idea here is that in the start we are quite interested in making
-        # large jumps in each psi and tau, however in the end we are more interested 
-        # in wiggeling them around to perform the last bit of optimization
-        n = max(0, min(np.random.geometric(1 - 0.2) - 1, len(individual)))
-        for idx in np.random.choice(len(individual), n, replace = False):
-            (k, psi, _, r) = individual.route[idx]
-            if np.random.uniform(0, 1) < 0.9: # Stay within the same AOA but wiggle the values sligtly.
-                # Compute probabilities of picking an areas of acqusion based on their "arc lengths"
-                # with higher arc lengths having having  a higher probability of getting chosen.
-                arc_lengths = []
-                for aoa in self.problem_instance.nodes[k].AOAs:
-                    if aoa.contains_angle(psi):
-                        break
-
-                # TODO: Consider using beta distribution to compute these
-                if aoa.a < aoa.b:
-                    new_psi = truncnorm.rvs((aoa.a - psi) / scale, (aoa.b - psi)  / scale, loc = psi, scale = scale)
-                else:
-                    new_psi = truncnorm.rvs((aoa.a - psi)  / scale, (aoa.b + 2 * np.pi - psi) / scale, loc = psi, scale = scale) % (2 * np.pi)
-
-                new_tau = (new_psi + np.pi + truncnorm.rvs((-self.problem_instance.eta / 2) / scale, (self.problem_instance.eta / 2) / scale,
-                                        loc = 0, scale = scale)) % (2 * np.pi)
-
-                new_r = truncnorm.rvs((self.problem_instance.sensing_radii[0] - r) / scale, (self.problem_instance.sensing_radii[1] - r) / scale, loc = r, scale = scale)
-
-            else: # Pick a random new angle uniformly.
-                arc_lengths = []
-                for aoa in self.problem_instance.nodes[k].AOAs:
-                    arc_length = aoa.b - aoa.a if aoa.a < aoa.b else (2 * np.pi - aoa.b) + aoa.a
-                    arc_lengths.append(arc_length)
-
-                aoa_probabilities = np.array(arc_lengths) / sum(arc_lengths)
-                aoa: AreaOfAcquisition = np.random.choice(self.problem_instance.nodes[k].AOAs, size = 1, p = aoa_probabilities)[0]
-
-                # Generate new visit randomly.
-                new_psi = aoa.generate_uniform_angle()
-                new_tau = ((np.pi + new_psi) + (np.random.beta(4, 4) - 0.5) * self.problem_instance.eta)  % (2 * np.pi)
-                new_r = np.random.uniform(self.problem_instance.sensing_radii[0], self.problem_instance.sensing_radii[1])
-
-            individual.route[idx] = (k, new_psi, new_tau, new_r)
-            individual.states[idx] = self.problem_instance.get_state(individual.route[idx])
-            individual.scores[idx] = self.problem_instance.compute_score_of_visit(individual.route[idx], self.utility_function)
-
-        return individual 
 
     # --------------------------------------------------------- Feasability ------------------------------------------------------------------- #
     def fix_length_optimized(self, individual: Individual, indicies_to_skip: List[int]) -> Individual:
@@ -636,9 +593,78 @@ class GA:
 
         return individual
 
-    def add_visits(self, individual: Individual, maximum_number_of_attemps: int = 4) -> Individual:
-        """Tries to add close to free visits to the individual."""
-        return individual # TODO
+    def add_visits(self, individual: Individual, maximum_number_of_attemps: int = 0) -> Individual:
+        """Tries to add close to free visits to the individual, and checks if the SDR score increases."""
+        if individual.segment_lengths is None:
+            individual.segment_lengths = self.problem_instance.compute_lengths_of_route_segments(individual.route)
+
+        total_score = sum(individual.scores)
+        ks_already_visited = {k for (k, _, _, _) in individual.route}
+        for i in range(maximum_number_of_attemps):
+            # 1. Pick a dubins path segement (it is probabily suitable to pick one of the longer segments.)
+            total_length = sum(individual.segment_lengths)
+            if i == 0:
+                sdr_score = total_score / total_length
+
+            probs_for_segments = [segment_length / total_length for segment_length in individual.segment_lengths]
+            idx = np.random.choice(len(individual) + 1, p = probs_for_segments)
+
+            # 2. Compute the minimum distance from each point to the dubins path segment
+            ks = [k for k in range(len(self.problem_instance.nodes)) if not (k in ks_already_visited)] 
+
+            minimum_distances = np.zeros(len(ks))
+
+            for j, k in enumerate(ks):
+                minimum_distances[j] = 0
+            
+            # TODO: Compute these based on the minimum distance to the existing path segment & the score of the node.
+            probs_for_ks = (1 / len(ks)) * np.ones(len(ks))
+
+            # 3. Based on the minimum distance from the point to the dubins path segment, try to add a visit to the route.
+            #    if the sdr does not increase, then don't add the visit to the route.
+            k = ks[np.random.choice(len(ks), p = probs_for_ks)]
+            new_visit = self.pick_best_explored_visit_based_on_sdr(individual.route, i, k)[0]
+            new_state = self.problem_instance.get_state(new_visit)
+
+            # Compute the lengths of the new path segments.
+            if idx == 0:
+                new_lengths = (compute_length_of_relaxed_dubins_path(new_state.angle_complement(), self.problem_instance.source, self.problem_instance.rho),
+                               dubins.shortest_path(new_state.to_tuple(), individual.states[idx].to_tuple(), self.problem_instance.rho).path_length())
+
+            elif idx == len(individual):
+                new_lengths = (dubins.shortest_path(individual.states[-1].to_tuple(), new_state.to_tuple(), self.problem_instance.rho).path_length(),
+                               compute_length_of_relaxed_dubins_path(new_state, self.problem_instance.sink, self.problem_instance.rho))
+
+            else:
+                new_lengths = (dubins.shortest_path(individual.states[idx - 1].to_tuple(), new_state.to_tuple(), self.problem_instance.rho).path_length(),
+                               dubins.shortest_path(new_state.to_tuple(), individual.states[idx].to_tuple(), self.problem_instance.rho).path_length())
+
+            
+            # 4. Add visit to route if the sdr score is increased.
+            score_of_new_visit = self.problem_instance.compute_score_of_visit(new_visit, self.utility_function)
+            change_in_length = (new_lengths[0] + new_lengths[1]) - individual.segment_lengths[idx]
+            
+            if (new_sdr_score := (total_score + score_of_new_visit) / (total_length + change_in_length)) >= sdr_score:
+                # Update information used within the method.
+                sdr_score = new_sdr_score
+                total_score += score_of_new_visit
+                ks_already_visited.add(k)
+                
+                # Set information within the individual
+                individual.segment_lengths[idx] = new_lengths[0]
+                individual.segment_lengths.insert(idx + 1, new_lengths[1])
+                individual.route.insert(idx, new_visit)
+                individual.scores.insert(idx, score_of_new_visit) 
+                individual.states.insert(idx, new_state)
+
+                aoa = self.problem_instance.nodes[new_visit[0]].get_AOA(new_visit[1])
+                individual.aoa_indicies.insert(idx, self.problem_instance.nodes[new_visit[0]].AOAs.index(aoa))
+
+                individual.psi_mutation_step_sizes.insert(idx,  aoa.phi / 256)
+                individual.tau_mutation_step_sizes.insert(idx, self.tau_default_mutation_step_size)
+                individual.r_mutation_step_sizes.insert(idx, self.r_default_mutation_step_size)
+
+        return individual 
 
     # ---------------------------------------- Parent Selection ----------------------------------------- #
     def windowing(self) -> ArrayLike:
@@ -684,9 +710,28 @@ class GA:
         self.fitnesses = fitnesses_of_offspring[indicies_of_new_generation]
         return [offspring[i] for i in indicies_of_new_generation]
 
+    def mu_plus_lambda_selection(self, offspring: List[CEDOPADSRoute]) -> List[CEDOPADSRoute]:
+        """Merges the newly generated offspring with the generation and selects the best mu individuals to survive until the next generation."""
+        # NOTE: Recall that the fitness is time dependent hence we need to recalculate it for the parents.
+        fitnesses_of_parents_and_offspring = np.array(list(map(lambda child: self.fitness_function(child), self.population + offspring)))
+
+        # Calculate the indicies of the best performing memebers
+        indicies_of_new_generation = np.argsort(fitnesses_of_parents_and_offspring)[-self.mu:]
+        
+        # Simply set the new fitnesses which have been calculated recently.
+        self.fitnesses = fitnesses_of_parents_and_offspring[indicies_of_new_generation]
+
+        return [self.population[i] if i < self.mu else offspring[i - self.mu] for i in indicies_of_new_generation]
+
     # -------------------------------------------- Main Loop of GA --------------------------------------- #
-    def run(self, time_budget: float, display_progress_bar: bool = False) -> CEDOPADSRoute:
+    def run(self, time_budget: float, display_progress_bar: bool = False, trace: bool = False) -> CEDOPADSRoute:
         """Runs the genetic algorithm for a prespecified time, given by the time_budget, using k-point crossover with m parrents."""
+        if trace:
+            info_mean_fitness = []
+            info_min_fitness = []
+            info_max_fitness = []
+            info_goat_fitness = []
+
         start_time = time.time()
         # Generate an initial population, which almost satifies the distant constraint, ie. add nodes until
         # the sink cannot be reached within d - t_max units where d denotes the length of the route.
@@ -737,6 +782,12 @@ class GA:
                         "Best": f"({self.fitnesses[idx_of_individual_with_highest_fitness]:.1f}, {length_of_best_route:.1f}, {len(self.population[idx_of_individual_with_highest_fitness])})",
                         "Aver": f"({avg_fitness:.1f}, {avg_distance:.1f}, {avg_length:.1f})"
                     })
+            
+            if trace:
+                info_mean_fitness.append(np.mean(self.fitnesses))
+                info_min_fitness.append(np.min(self.fitnesses))
+                info_max_fitness.append(np.max(self.fitnesses))
+                info_goat_fitness.append(self.fitnesses[idx_of_individual_with_highest_fitness])
 
             while time.time() - start_time < time_budget:
                 # Generate new offspring using parent selection based on the computed fitnesses, to select m parents
@@ -750,16 +801,9 @@ class GA:
                     parents = [self.population[i] for i in parent_indicies]
                     for child in self.partially_mapped_crossover(parents):
                         mutated_child, indicies_to_skip = self.mutate(child, p = 0.1, q = 0.3) 
-                        fixed_mutated_child = self.fix_length_optimized(self.optimize_visits(mutated_child), indicies_to_skip) 
+                        fixed_mutated_child = self.fix_length_optimized(self.optimize_visits(self.add_visits(mutated_child)), indicies_to_skip) 
                         offspring.append(fixed_mutated_child)
                 
-                if self.xi != 0:
-                    parents_to_be_mutated = [self.population[i] for i in self.stochastic_universal_sampling(cdf, self.xi)]
-                    for parent in parents_to_be_mutated:
-                        mutated_parent = self.non_self_adaptive_scalar_mutation(parent)
-                        fixed_mutated_parent = self.fix_length_optimized(self.optimize_visits(mutated_parent), []) 
-                        offspring.append(fixed_mutated_parent)
-
                 # Survivor selection, responsible for find the lements which are passed onto the next generation.
                 gen += 1
                 self.population = self.mu_comma_lambda_selection(offspring)
@@ -797,6 +841,24 @@ class GA:
                             "Var": f"{np.var(self.fitnesses):.1f}"
                     })
 
+                if trace:
+                    info_mean_fitness.append(np.mean(self.fitnesses))
+                    info_min_fitness.append(np.min(self.fitnesses))
+                    info_max_fitness.append(np.max(self.fitnesses))
+                    info_goat_fitness.append(self.highest_fitness_recorded)
+            
+        # Plot information if a trace is requested.
+        if trace:
+            plt.style.use("ggplot")
+            xs = list(range(gen + 1))
+            plt.fill_between(xs, info_min_fitness, info_max_fitness, label="Fitnesses", color="tab:blue", alpha=0.6)
+            plt.plot(xs, info_mean_fitness, color="tab:blue", label="Mean Fitness")
+            plt.plot(xs, info_goat_fitness, color="black", label="GOAT fitness")
+            plt.legend()
+            plt.xlabel("Generation")
+            plt.ylabel("Fitness")
+            plt.show()
+
         return self.individual_with_highest_recorded_fitness.route
 
 if __name__ == "__main__":
@@ -806,7 +868,7 @@ if __name__ == "__main__":
     ga = GA(problem_instance, utility_function, mu = mu, lmbda = mu * 7, xi = int(np.floor(mu / 4)))
     #import cProfile
     #cProfile.run("ga.run(300, display_progress_bar = True)", sort = "cumtime")
-    route = ga.run(300, display_progress_bar=True)
+    route = ga.run(300, display_progress_bar=True, trace=True)
     augmented_route = add_free_visits(problem_instance, route, utility_function)
     print(f"Score of augmented route: {problem_instance.compute_score_of_route(augmented_route, utility_function)} from {problem_instance.compute_score_of_route(route, utility_function)}")
     problem_instance.plot_with_route(route, utility_function)
