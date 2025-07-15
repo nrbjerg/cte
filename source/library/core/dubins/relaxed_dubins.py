@@ -297,3 +297,4 @@ if __name__ == "__main__":
     q = State(np.array([-2.0, -5.6]), 4.71)
     p = np.array([0, -7])
     print(compute_relaxed_dubins_path(q, p, 1, plot = True, verbose_plot = False))
+    plt.show()

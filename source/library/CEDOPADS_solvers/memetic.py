@@ -17,6 +17,7 @@ from scipy.stats import truncnorm
 from library.CEDOPADS_solvers.local_search_operators import remove_visit, greedily_add_visits_while_posible, add_free_visits, get_equdistant_samples
 from dataclasses import dataclass, field
 from numba import njit
+from library.core.dubins.distance_from_point_to_dubins_path import compute_minimum_distance_from_dubins_path, compute_minimum_distance_from_relaxed_dubins_path
 
 @dataclass()
 class Individual:
@@ -611,14 +612,14 @@ class GA:
 
             # 2. Compute the minimum distance from each point to the dubins path segment
             ks = [k for k in range(len(self.problem_instance.nodes)) if not (k in ks_already_visited)] 
+            if idx == 0:
+                pseudo_sdrs = np.array([self.problem_instance.nodes[k].base_line_score / compute_minimum_distance_from_relaxed_dubins_path(self.problem_instance.nodes[k].pos, individual.states[0].angle_complement(), self.problem_instance.source, self.problem_instance.rho) for k in ks])
+            elif idx == len(individual):
+                pseudo_sdrs = np.array([self.problem_instance.nodes[k].base_line_score / compute_minimum_distance_from_relaxed_dubins_path(self.problem_instance.nodes[k].pos, individual.states[-1], self.problem_instance.sink, self.problem_instance.rho) for k in ks])
+            else:
+                pseudo_sdrs = np.array([self.problem_instance.nodes[k].base_line_score / compute_minimum_distance_from_dubins_path(self.problem_instance.nodes[k].pos, individual.states[idx - 1], individual.states[idx], self.problem_instance.rho) for k in ks])
 
-            minimum_distances = np.zeros(len(ks))
-
-            for j, k in enumerate(ks):
-                minimum_distances[j] = 0
-            
-            # TODO: Compute these based on the minimum distance to the existing path segment & the score of the node.
-            probs_for_ks = (1 / len(ks)) * np.ones(len(ks))
+            probs_for_ks = pseudo_sdrs / np.sum(pseudo_sdrs)
 
             # 3. Based on the minimum distance from the point to the dubins path segment, try to add a visit to the route.
             #    if the sdr does not increase, then don't add the visit to the route.
@@ -673,7 +674,7 @@ class GA:
         modified_fitnesses = self.fitnesses - minimum_fitness
         return modified_fitnesses / np.sum(modified_fitnesses)
 
-    def sigma_scaling(self, c: float = 2) -> ArrayLike:
+    def sigma_scaling(self, c: float = 2.0) -> ArrayLike:
         """Uses sigma scaling to compute the probabilities that each indvidual in the population is chosen for recombination."""
         modified_fitnesses = np.maximum(self.fitnesses - (np.mean(self.fitnesses) - c * np.std(self.fitnesses)), 0)
         return modified_fitnesses / np.sum(modified_fitnesses)
@@ -873,4 +874,3 @@ if __name__ == "__main__":
     print(f"Score of augmented route: {problem_instance.compute_score_of_route(augmented_route, utility_function)} from {problem_instance.compute_score_of_route(route, utility_function)}")
     problem_instance.plot_with_route(route, utility_function)
     plt.show()
-# %%

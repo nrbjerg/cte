@@ -43,4 +43,4 @@ def compare_logs(file_ids: List[str]):
     plt.show()
         
 if __name__ == "__main__":
-    compare_logs(["updated_grasp", "grasp", "grasp_with_higher_p", "SA_with_SI"])
+    compare_logs(["updated_grasp", "grasp_with_higher_p", "SA_with_SI", "non_SA_with_SI"])

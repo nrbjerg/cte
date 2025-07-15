@@ -9,7 +9,7 @@ from matplotlib import pyplot as plt
 from library.core.interception.intercepter import InterceptionRoute
 
 # NOTE: This version computes the interception points using newton-raphson.
-def compute_euclid_interception(pos: Position, vel: float, route: Route, default_position: Position, lock_on_time: float = 0, eps: float = 0.001, plot: bool = False) -> Optional[Position]:
+def compute_euclid_interception(pos: Position, vel: float, route: Route, lock_on_time: float = 0, eps: float = 0.001, plot: bool = False) -> Optional[Position]:
     """Computes the position of the closest euclidian intercept on the route."""
     if vel < 1:
         raise ValueError("Expected the pursuers velocity to be greater than 1, which is the velocity of the targets.")

@@ -45,7 +45,7 @@ class OPInstance:
     @staticmethod
     def load_from_file(file_name: str) -> OPInstance:
         """Loads a TOP instance from a given problem id"""
-        with open(os.path.join(os.getcwd(), "resources", "CPM_HTOP", file_name), "r") as file:
+        with open(os.path.join(os.getcwd(), "resources", "CPM_RTOP", file_name), "r") as file:
             lines = list(map(lambda line: line.strip(), file.read().splitlines())) # NOTE: skip the first line which contains information about the number of nodes.
             N = int(lines[0].split(" ")[-1])
             t_max = float(lines[2].split(" ")[-1]) 

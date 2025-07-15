@@ -19,8 +19,8 @@ plt.rcParams['figure.figsize'] = [9, 9]
 
 # NOTE: This function takes an interception route to be able to use both a dubins intercepter and an euclidian intercepter.
 # TODO: Make this alot more efficient
-def compute_CPM_HTOP_scores(problem_instance: CPM_HTOP_Instance, routes: List[Route], cpm_route: InterceptionRoute) -> List[float]:
-    """Computes the scores of each UAV and the CPM of a given solution to a CPM-HTOP problem instance."""
+def compute_CPM_RTOP_scores(problem_instance: CPM_RTOP_Instance, routes: List[Route], cpm_route: InterceptionRoute) -> List[float]:
+    """Computes the scores of each UAV and the CPM of a given solution to a CPM-RTOP problem instance."""
 
     def sigma(k: int, i: int) -> float:
         """Computes the probability of UAV k remaining operational until the CPM has reached interception point i"""
@@ -61,13 +61,13 @@ def compute_CPM_HTOP_scores(problem_instance: CPM_HTOP_Instance, routes: List[Ro
 
     return expected_scores_of_uavs + [expected_score_of_cpm]
 
-def compute_CPM_HTOP_score(problem_instance: CPM_HTOP_Instance, routes: List[Route], cpm_route: InterceptionRoute) -> float:
-    """Computes the scores of each UAV and the CPM of a given solution to a CPM-HTOP problem instance."""
-    return sum(compute_CPM_HTOP_scores(problem_instance, routes, cpm_route))
+def compute_CPM_RTOP_score(problem_instance: CPM_RTOP_Instance, routes: List[Route], cpm_route: InterceptionRoute) -> float:
+    """Computes the scores of each UAV and the CPM of a given solution to a CPM-RTOP problem instance."""
+    return sum(compute_CPM_RTOP_scores(problem_instance, routes, cpm_route))
 
 @dataclass
-class CPM_HTOP_Instance:
-    """Stores the data related to a DTOP-HTOP instance."""
+class CPM_RTOP_Instance:
+    """Stores the data related to a DTOP-RTOP instance."""
     problem_id: str
     number_of_agents: int
     t_max: float
@@ -82,9 +82,9 @@ class CPM_HTOP_Instance:
     _edges_added_to_source_and_sink: Set[Tuple[int, int]] | None = None
 
     @staticmethod
-    def load_from_file(file_name: str, neighbourhood_level: int = 1, needs_plotting: bool = False) -> CPM_HTOP_Instance:
+    def load_from_file(file_name: str, neighbourhood_level: int = 1, needs_plotting: bool = False) -> CPM_RTOP_Instance:
         """Loads a TOP instance from a given problem id"""
-        with open(os.path.join(os.getcwd(), "resources", "CPM_HTOP", file_name), "r") as file:
+        with open(os.path.join(os.getcwd(), "resources", "CPM_RTOP", file_name), "r") as file:
             lines = list(map(lambda line: line.strip(), file.read().splitlines()))
             # NOTE: skip the first line which contains information about the number of nodes.
             N =  int(lines[0].split(" ")[-1])
@@ -96,13 +96,13 @@ class CPM_HTOP_Instance:
 
             nodes = []
             risk_matrix = np.zeros(shape=(N, N))
-            for node_id, (x_pos, y_pos, score, *risks) in enumerate(map(lambda line: tuple(map(float, line.split(" "))), lines[5:])):
+            for node_id, (x_pos, y_pos, score, *risks) in enumerate(map(lambda line: tuple(map(float, line.split(" "))), lines[6:])):
                 risk_matrix[node_id] = risks
                 pos = np.array([x_pos, y_pos])
                 nodes.append(Node(node_id, [], pos, score))
             
             # Perform triangulation, according to the neighbourhood level.
-            edges_added_to_source_and_sink = CPM_HTOP_Instance._mark_adjacent_nodes_as_adjacent(nodes, neighbourhood_level = neighbourhood_level)
+            edges_added_to_source_and_sink = CPM_RTOP_Instance._mark_adjacent_nodes_as_adjacent(nodes, neighbourhood_level = neighbourhood_level)
 
             # Finally make sure that every node is incident to the source and sinks.
             source = nodes[0]
@@ -124,10 +124,10 @@ class CPM_HTOP_Instance:
                 # Set colors and return instance
                 colors = ["tab:blue", "tab:orange", "tab:green", "tab:red"] # TODO: add extra colors
 
-                return CPM_HTOP_Instance(file_name[:-4], number_of_agents, t_max, cpm_speed, kappa, d_cpm, source, sink, nodes, risk_matrix, _colors = colors, _edges_added_to_source_and_sink = edges_added_to_source_and_sink)
+                return CPM_RTOP_Instance(file_name[:-4], number_of_agents, t_max, cpm_speed, kappa, d_cpm, source, sink, nodes, risk_matrix, _colors = colors, _edges_added_to_source_and_sink = edges_added_to_source_and_sink)
 
             else: 
-                return CPM_HTOP_Instance(file_name[:-4], number_of_agents, t_max, cpm_speed, kappa, d_cpm, source, sink, nodes, risk_matrix)
+                return CPM_RTOP_Instance(file_name[:-4], number_of_agents, t_max, cpm_speed, kappa, d_cpm, source, sink, nodes, risk_matrix)
 
     @staticmethod
     def _mark_adjacent_nodes_as_adjacent(nodes: List[Node], neighbourhood_level: int = 1) -> Set[Tuple[int, int]]:
@@ -193,7 +193,7 @@ class CPM_HTOP_Instance:
         plt.scatter(*self.source.pos, 120, marker = "s", c = "black", zorder=10)
         plt.scatter(*self.sink.pos, 120, marker = "d", c = "black", zorder=10)
 
-        #plt.title(f"CPM-HTOP: {self.problem_id}")
+        #plt.title(f"CPM-RTOP: {self.problem_id}")
         if plot_nodes:
             sizes = [node.size for node in self.nodes[1:-1]] 
             plt.scatter([node.pos[0] for node in self.nodes[1:-1]], [node.pos[1] for node in self.nodes[1:-1]], sizes, c = "tab:gray", zorder=2)
@@ -236,14 +236,13 @@ class CPM_HTOP_Instance:
         if show:
             plt.show()
 
-    def plot_CPM_HTOP_solution(self, routes: List[Route], cpm_route: InterceptionRoute, cpm_route_color: str = "tab:purple", show: bool = True):
-        """Plots a CPM-HTOP solution, ie. a set of UAV routes and a CPM route"""
+    def plot_CPM_RTOP_solution(self, routes: List[Route], cpm_route: InterceptionRoute, cpm_route_color: str = "tab:purple", show: bool = True):
+        """Plots a CPM-RTOP solution, ie. a set of UAV routes and a CPM route"""
         self.plot_with_routes(routes, plot_points=True, show=False)
         cpm_route.plot(c = cpm_route_color,show=False)
 
-        scores = compute_CPM_HTOP_scores(self, routes, cpm_route)
+        scores = compute_CPM_RTOP_scores(self, routes, cpm_route)
 
-        
         indicators = [mlines.Line2D([], [], color=color, label=f"UAV {idx}: {round(score, 2)}", marker="o") for idx, (score, color) in enumerate(zip(scores[:-1], self._colors))]
         indicators.append(mlines.Line2D([], [], color=cpm_route_color, label=f"CPM: {round(scores[-1], 2)}", marker="P"))
         plt.legend(handles=indicators, loc=1)
@@ -256,15 +255,13 @@ class CPM_HTOP_Instance:
         probability_of_survival = prod(1 - self.risk_matrix[fst.node_id, snd.node_id] for fst, snd in zip(route.nodes[:-1], route.nodes[1:]))
         return 1 - probability_of_survival
 
-def load_CPM_HTOP_instances(needs_plotting: bool = False, neighbourhood_level: int = 1) -> List[CPM_HTOP_Instance]:
+def load_CPM_RTOP_instances(needs_plotting: bool = False, neighbourhood_level: int = 1) -> List[CPM_RTOP_Instance]:
     """Loads the set of TOP instances saved within the resources folder."""
-    folder_with_top_instances = os.path.join(os.getcwd(), "resources", "CPM_HTOP")
-    return [CPM_HTOP_Instance.load_from_file(file_name, needs_plotting = needs_plotting, neighbourhood_level = neighbourhood_level) 
+    folder_with_top_instances = os.path.join(os.getcwd(), "resources", "CPM_RTOP")
+    return [CPM_RTOP_Instance.load_from_file(file_name, needs_plotting = needs_plotting, neighbourhood_level = neighbourhood_level) 
             for file_name in os.listdir(folder_with_top_instances)]
 
 if __name__ == "__main__":
-
-    first_cpm_htop_instance = CPM_HTOP_Instance.load_from_file("p4.2.a.0.txt", needs_plotting=True)
-    #first_cpm_htop_instance = load_CPM_HTOP_instances(needs_plotting = True, neighbourhood_level = 1)[0]
-    first_cpm_htop_instance.plot(show=False)
+    first_cpm_RTOP_instance = CPM_RTOP_Instance.load_from_file("p4.2.a.0.txt", needs_plotting=True)
+    first_cpm_RTOP_instance.plot(show=False)
     plt.savefig("test.png", bbox_inches="tight")

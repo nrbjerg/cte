@@ -8,7 +8,7 @@ import os
 import matplotlib.pyplot as plt
 
 import numpy as np
-from classes.problem_instances.cpm_htop_instances import CPM_HTOP_Instance, load_CPM_HTOP_instances
+from classes.problem_instances.cpm_rtop_instances import CPM_RTOP_Instance, load_CPM_RTOP_instances
 from classes.node import Node
 from classes.route import Route
 from library.core.dijskstra import dijkstra
@@ -16,16 +16,16 @@ from library.core.interception.euclidian_intercepter import EuclidianInterceptio
 from library.core.interception.intercepter import InterceptionRoute
 from sklearn.cluster import KMeans
 
-def risk_aware_sdr(problem: CPM_HTOP_Instance, tail: Node, node: Node) -> float:
+def risk_aware_sdr(problem: CPM_RTOP_Instance, tail: Node, node: Node) -> float:
     """Computes a risk aware score distance ratio (SDR) score."""
     return node.score * (1 - problem.risk_matrix[tail.node_id, node.node_id]) / np.linalg.norm(tail.pos - node.pos)
 
-def weight_for_clustering(problem: CPM_HTOP_Instance, node: Node) -> float:
+def weight_for_clustering(problem: CPM_RTOP_Instance, node: Node) -> float:
     """Computes the weight assigned to the node, when / if doing clustering as an initial step in the GRASP implementation."""
     survival_probability = (1 - problem.risk_matrix[problem.source.node_id, node.node_id]) * (1 - problem.risk_matrix[problem.sink.node_id, node.node_id])
     return node.score * survival_probability / (np.linalg.norm(problem.source.pos - node.pos) ** 2 + node.distance_to_sink ** 2)
 
-def greedy(problem: CPM_HTOP_Instance, routes: List[Route], p: float = 1.0, score_heuristic: Callable[[CPM_HTOP_Instance, Node, Node], float] = risk_aware_sdr) -> List[Route]:
+def greedy(problem: CPM_RTOP_Instance, routes: List[Route], p: float = 1.0, score_heuristic: Callable[[CPM_RTOP_Instance, Node, Node], float] = risk_aware_sdr) -> List[Route]:
     """Runs a greedy algorithm on the problem instance, with initial routes given"""
     remaining_distances = [problem.t_max - routes[agent_index].distance for agent_index in range(problem.number_of_agents)]
     
@@ -164,7 +164,7 @@ def _hill_climbing(initial_solution: List[Route], t_max: float) -> List[Route]: 
                         
     return updated_routes 
 
-def _worker_function(data: Tuple[CPM_HTOP_Instance, float, List[Route], int, List[Route], int | float, int, int | None]) -> List[Route]:
+def _worker_function(data: Tuple[CPM_RTOP_Instance, float, List[Route], int, List[Route], int | float, int, int | None]) -> List[Route]:
     """The worker function which will be used during the next multi processing step, the data tuple contains a seed and the start time."""
     (problem, p, initial_routes, seed, best_candidate_solution, time_budget, start_time, maximum_number_of_iterations) = data
     best_score = sum(route.score for route in best_candidate_solution)
@@ -185,7 +185,7 @@ def _worker_function(data: Tuple[CPM_HTOP_Instance, float, List[Route], int, Lis
 
     return best_candidate_solution
 
-def grasp(problem: CPM_HTOP_Instance, time_budget: int, p: float, use_centroids: bool = False, maximum_number_of_iterations: int | None = None) -> List[Route]:
+def grasp(problem: CPM_RTOP_Instance, time_budget: int, p: float, use_centroids: bool = False, maximum_number_of_iterations: int | None = None) -> List[Route]:
     """Runs a greedy adataptive search procedure on the problem instance,
     the time_budget is given in seconds and the value p determines how many
     candidates are included in the RCL candidates list,
@@ -229,7 +229,7 @@ def grasp(problem: CPM_HTOP_Instance, time_budget: int, p: float, use_centroids:
     best_candidate_solution = max(candidate_solutions, key = lambda candidate_solution: sum([route.score for route in candidate_solution]))
     return best_candidate_solution
 
-def greedy_cpm(problem_instance: CPM_HTOP_Instance, routes: List[Route], intercepter: InterceptionRoute) -> InterceptionRoute:
+def greedy_cpm(problem_instance: CPM_RTOP_Instance, routes: List[Route], intercepter: InterceptionRoute) -> InterceptionRoute:
     """Greedily choses the route indicies (based on the heuristic score * risk of becomming non-operational after intercept / distance to intercept.) and produces an interception route, from this."""
     route_indicies = []
 
@@ -241,13 +241,13 @@ def greedy_cpm(problem_instance: CPM_HTOP_Instance, routes: List[Route], interce
 
 
 if __name__ == "__main__":
-    folder_with_top_instances = os.path.join(os.getcwd(), "resources", "CPM_HTOP") 
-    cpm_htop_instance = CPM_HTOP_Instance.load_from_file("p4.3.f.0.txt", needs_plotting=True)
+    folder_with_top_instances = os.path.join(os.getcwd(), "resources", "CPM_RTOP") 
+    cpm_RTOP_instance = CPM_RTOP_Instance.load_from_file("p4.3.f.0.txt", needs_plotting=True)
     print("Running Algorithm")
-    routes = grasp(cpm_htop_instance, p = 0.7, time_budget = 10, use_centroids = True)
+    routes = grasp(cpm_RTOP_instance, p = 0.7, time_budget = 10, use_centroids = True)
     print("Finished Algorithm")
-    euclidian_interception_route = EuclidianInterceptionRoute(cpm_htop_instance.source.pos, [0, 2, 1, 0, 2, 1, 0], routes, 1.6, waiting_time=1)
-    cpm_htop_instance.plot_with_routes(routes, plot_points=True, show=False)
+    euclidian_interception_route = EuclidianInterceptionRoute(cpm_RTOP_instance.source.pos, [0, 2, 1, 0, 2, 1, 0], routes, 1.6, waiting_time=1)
+    cpm_RTOP_instance.plot_with_routes(routes, plot_points=True, show=False)
     euclidian_interception_route.plot()
 
 

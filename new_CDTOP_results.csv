@@ -1,0 +1,22 @@
+Problem Id,Z_CDTOP,Z_TOP,% \Delta,Linkage,M,Optimimum
+p4.4.g,460.0,461,0.2,complete,8,False
+p4.4.h,571.0,571,0.0,single,8,True
+p4.4.h,554.0,571,3.0,average,8,False
+p4.4.h,558.0,571,2.3,complete,8,False
+p4.3.g,652.0,653,0.2,single,16,False
+p4.3.g,652.0,653,0.2,average,16,False
+p4.3.g,653.0,653,0.0,complete,16,True
+p4.4.h,571.0,571,0.0,average,16,True
+p4.4.h,571.0,571,0.0,complete,16,True
+p4.3.g,648.0,653,0.8,single,32,False
+p4.3.g,648.0,653,0.8,average,32,False
+p4.3.g,648.0,653,0.8,complete,32,False
+p4.4.g,461.0,461,0.0,single,32,True
+p4.4.g,458.0,461,0.7,average,32,False
+p4.4.g,458.0,461,0.7,complete,32,False
+p4.4.h,571.0,571,0.0,single,32,True
+p4.4.h,571.0,571,0.0,average,32,True
+p4.2.a,195.0,206,5.3,average,32,True
+p4.2.a,195.0,206,5.3,complete,32,True
+p4.2.b,326.0,341,4.4,average,32,True
+p4.2.b,326.0,341,4.4,complete,32,True

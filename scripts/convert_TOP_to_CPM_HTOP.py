@@ -8,7 +8,7 @@ import matplotlib as mpl
 from tqdm import tqdm
 
 path_to_TOP_instances = os.path.join(os.getcwd(), "resources", "TOP")
-path_to_CPM_HTOP_instances = os.path.join(os.getcwd(), "resources", "CPM_HTOP")
+path_to_CPM_RTOP_instances = os.path.join(os.getcwd(), "resources", "CPM_RTOP")
 
 plotted = False
 
@@ -101,6 +101,6 @@ for idx, file_id in tqdm(enumerate(sorted(os.listdir(path_to_TOP_instances)))):
             cpm_info = f"\nVcpm {velocity}\ndmax {distance}\n"
 
             new_file_id = ".".join(file_id.split(".")[:-1]) + f".{idx * 3 + jdx}.txt"
-            with open(os.path.join(path_to_CPM_HTOP_instances, new_file_id), "w+") as new_file:
+            with open(os.path.join(path_to_CPM_RTOP_instances, new_file_id), "w+") as new_file:
                 new_info = "\n".join(info) + cpm_info 
                 new_file.write(new_info + points_and_risks)

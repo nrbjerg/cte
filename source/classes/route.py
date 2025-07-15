@@ -10,7 +10,7 @@ import numpy as np
 class Route:
     """Models a route via a starting node and a list of indicies, """
     nodes: List[Node]
-    speed: float = 1.0 # Should remained fixed at one for CPM-HTOP
+    speed: float = 1.0 # Should remained fixed at one for CPM-RTOP
 
     #@cached_property
     @property

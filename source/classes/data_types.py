@@ -3,6 +3,7 @@ from __future__ import annotations
 from numpy.typing import ArrayLike
 import numpy as np
 from dataclasses import dataclass, field
+from typing import List
 import matplotlib as mpl
 from typing import Tuple
 from matplotlib import pyplot as plt 
@@ -16,6 +17,7 @@ Velocity = ArrayLike
 Matrix = ArrayLike
 Vector = ArrayLike
 
+Route = List[int]
 Angle = float
 
 @nb.njit()
