@@ -14,7 +14,7 @@ from tqdm import tqdm
 import itertools
 import matplotlib.pyplot as plt
 from scipy.stats import truncnorm
-from library.CEDOPADS_solvers.local_search_operators import remove_visit, greedily_add_visits_while_posible, add_free_visits, get_equdistant_samples
+from library.CEDOPADS_solvers.local_search_operators import remove_visit, greedily_add_visits_while_possible, add_free_visits, get_equidistant_samples
 from dataclasses import dataclass, field
 from numba import njit
 from library.core.dubins.distance_from_point_to_dubins_path import compute_minimum_distance_from_dubins_path, compute_minimum_distance_from_relaxed_dubins_path
@@ -112,7 +112,7 @@ class GA:
             blacklist = set()
 
             aoa_indicies = []
-            while self.problem_instance.is_route_feasable(route):
+            while self.problem_instance.is_route_feasible(route):
                 # Pick a new random visit and add it to the route.
                 k = random.choice(list(self.node_indicies.difference(blacklist)))
                 blacklist.add(k)
@@ -744,12 +744,12 @@ class GA:
         self.explored_scores = {}
 
         for k in range(len(self.problem_instance.nodes)):
-            self.explored_visits[k] = list(get_equdistant_samples(self.problem_instance, k))
+            self.explored_visits[k] = list(get_equidistant_samples(self.problem_instance, k))
             self.explored_states[k] = self.problem_instance.get_states(self.explored_visits[k])
             self.explored_scores[k] = self.problem_instance.compute_scores_along_route(self.explored_visits[k], self.utility_function)
 
         # Compute distances which will be used to guide the mutation operator
-        positions = np.concat((np.array([node.pos for node in self.problem_instance.nodes]), self.problem_instance.source.reshape(1, 2), self.problem_instance.sink.reshape(1, 2)))
+        positions = np.concatenate((np.array([node.pos for node in self.problem_instance.nodes]), self.problem_instance.source.reshape(1, 2), self.problem_instance.sink.reshape(1, 2)))
         self.sdr_tensor = compute_sdr_tensor(positions, np.array([node.base_line_score for node in self.problem_instance.nodes]), c_s = 2, c_d = 2)
         self.sdrs_for_overwrite = np.empty_like(self.sdr_tensor[0][0]) 
         self.default_mask = np.ones(self.number_of_nodes, dtype=bool)

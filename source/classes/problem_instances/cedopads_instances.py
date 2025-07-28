@@ -280,7 +280,7 @@ class CEDOPADSInstance:
         """Computes the scores along the route and returns them in a dictionary, with the indicies as keys."""
         return [self.compute_score_of_visit(visit, utility_function) for visit in route]
 
-    def is_route_feasable(self, route: CEDOPADSRoute) -> bool:
+    def is_route_feasible(self, route: CEDOPADSRoute) -> bool:
         """Checks if the route is feasable."""
         return self.compute_length_of_route(route) <= self.t_max
     

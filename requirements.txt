@@ -1,4 +1,5 @@
 numpy<2
+numba
 scipy
 matplotlib
 PyQt5

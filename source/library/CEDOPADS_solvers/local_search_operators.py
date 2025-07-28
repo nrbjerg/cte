@@ -28,7 +28,7 @@ def get_samples(problem: CEDOPADSInstance, k: int) -> Iterator[Tuple[Angle, Angl
             #yield (psi, (psi + np.pi + problem.eta / 3) % (2 * np.pi))
             #yield (psi, (psi + np.pi - problem.eta / 3) % (2 * np.pi))
 
-def get_equdistant_samples(problem: CEDOPADSInstance, k: int) -> Iterator[Tuple[Angle, Angle, float]]:
+def get_equidistant_samples(problem: CEDOPADSInstance, k: int) -> Iterator[Tuple[Angle, Angle, float]]:
     """Gets equidistant samples (cordinate wise) from within AOA i of node k"""
     r = sum(problem.sensing_radii) / 2
     for i in range(len(problem.nodes[k].AOAs)):
@@ -354,7 +354,7 @@ def hill_climbing(initial_route: CEDOPADSRoute, problem: CEDOPADSInstance, utili
 
     return best_route 
 
-def greedily_add_visits_while_posible(route: CEDOPADSRoute, problem: CEDOPADSInstance, utility_function: UtilityFunction, distance: float = None):
+def greedily_add_visits_while_possible(route: CEDOPADSRoute, problem: CEDOPADSInstance, utility_function: UtilityFunction, distance: float = None):
     """Tries to greedily add new visits to the route, each time picking the one with the highest local SDR score, 
     that is the change in score divided by the change in distance."""
     if distance == None:
