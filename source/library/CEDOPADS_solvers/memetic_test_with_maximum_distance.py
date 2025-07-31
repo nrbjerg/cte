@@ -8,9 +8,10 @@ from matplotlib import pyplot as plt
 from tqdm import tqdm
 from numpy.typing import ArrayLike
 from classes.problem_instances.cedopads_instances import CEDOPADSInstance, CEDOPADSRoute, Visit, UtilityFunction, utility_fixed_optical
-from library.core.dubins.relaxed_dubins import compute_length_of_relaxed_dubins_path
+from library.core.dubins.relaxed_dubins import compute_length_of_relaxed_dubins_path, compute_relaxed_dubins_path, CSPath, CCPath
 from typing import List, Tuple, Iterator, Optional
-from classes.data_types import State, Matrix, Vector, compute_difference_between_angles
+from classes.data_types import State, Matrix, Vector, compute_difference_between_angles, Dir
+from library.core.dubins.dubins_api import call_dubins, compute_minimum_distance_to_point_from_dubins_path_segment
 from library.CEDOPADS_solvers.local_search_operators import add_free_visits 
 import hashlib
 import itertools
@@ -45,14 +46,18 @@ class MemeticAlgorithm:
 	# Parameters for the memetic algorithm, controlling the population size and number of offspring.
 	mu: int
 	lmbda: int
+	
+	# Parameters for operators.
+	M: int
 
     # Parameters which makes sure that we dont have to recompute the same values over and over again.
 	number_of_nodes: int
 	node_indices_array: Vector
 
-	def __init__(self, problem_instance: CEDOPADSInstance, mu: int = 100, lmbda: int = 100, utility_function: UtilityFunction = utility_fixed_optical, seed: Optional[int] = None):
+	def __init__(self, problem_instance: CEDOPADSInstance, M: int = 3, mu: int = 100, lmbda: int = 100, utility_function: UtilityFunction = utility_fixed_optical, seed: Optional[int] = None):
 		"""Initializes the memetic algorithm with a given problem instance and parameters."""
 		self.problem_instance = problem_instance
+		self.M = M
 		self.mu = mu
 		self.lmbda = lmbda
 		self.utility_function = utility_function
@@ -213,17 +218,76 @@ class MemeticAlgorithm:
 
 	def pick_visit_to_insert_based_on_SDR(self, route: CEDOPADSRoute, i: int) -> Tuple[Visit, float]:
 		"""Picks the visit to insert at index i based on their SDR scores."""
-		blacklist = set(visit[0] for visit in route)
-
 		# TODO: Pick k based on distance to the path segment between the visits at i - 1 and i.
 		# Its okay if everything else stays stochastic for the moment.
-		k = random.choice(list(set(range(self.number_of_nodes)).difference(blacklist)))
+		if len(route) == 0:
+			blacklist = set(visit[0] for visit in route)
+			candidates = list(set(range(self.number_of_nodes)).difference(blacklist))
+			k = np.random.choice(candidates)
+			#k = random.choice(self.number_of_nodes)
 		
-		aoa_indices = np.random.randint(len(self.problem_instance.nodes[k].AOAs))
-		psi = self.problem_instance.nodes[k].AOAs[aoa_indices].generate_uniform_angle()
-		tau = (psi + np.pi + np.random.uniform( -self.problem_instance.eta / 2, self.problem_instance.eta / 2)) % (2 * np.pi)
-		r = random.uniform(self.problem_instance.sensing_radii[0], self.problem_instance.sensing_radii[1])
+		else:
+			blacklist = set(visit[0] for visit in route)
+			candidates = list(set(range(self.number_of_nodes)).difference(blacklist))
+			
+			# Pick k based on distance to the path segment between the visits at i - 1 and i if i != 0 and i != len(route) - 1.
+			# otherwise look at the distance between the source and visit i or the distance between visit i - 1 and the sink.
+			if i != 0 and i != len(route):
+				q_i, q_f = self.problem_instance.get_states(route[i - 1:i + 1])
+				(sub_segment_types, sub_segment_lengths) = call_dubins(q_i, q_f, self.problem_instance.rho)
+
+			else:
+				q_i = self.problem_instance.get_state(route[i]).angle_complement() if i == 0 else self.problem_instance.get_state(route[-1])
+				path_segment = compute_relaxed_dubins_path(q_i, self.problem_instance.source, self.problem_instance.rho)
+				
+				# Check the two types.
+				if type(path_segment) == CSPath:
+					sub_segment_types = [path_segment.direction, Dir.S]
+					length_of_initial_subsegment = self.problem_instance.rho * path_segment.radians_traversed_on_arc
+					sub_segment_lengths = [length_of_initial_subsegment, path_segment.length - length_of_initial_subsegment]
+
+				elif type(path_segment) == CCPath:
+					sub_segment_types = path_segment.directions
+					sub_segment_lengths = [self.problem_instance.rho * radians for radians in path_segment.radians_traversed_on_arcs]
+
+			distances = [compute_minimum_distance_to_point_from_dubins_path_segment(self.problem_instance.nodes[k].pos, q_i, sub_segment_types, sub_segment_lengths, self.problem_instance.rho) for k in candidates]
+
+			# If the minimum distance to the points are less than the sensing radius we dont care, but now we have the distances, we can compute the SDR scores.
+			sdr_scores = np.array([self.problem_instance.nodes[k].base_line_score / max(distance, self.problem_instance.sensing_radii[1]) for k, distance in zip(candidates, distances)])
+			k = candidates[np.random.choice(len(candidates), p = sdr_scores / np.sum(sdr_scores))]
 		
+		# After a node index k has been picked select the best of self.M visits to insert at index i based on SDR values.
+		visits, sdr_scores = [], []
+		for _ in range(self.M):
+			aoa_indices = np.random.randint(len(self.problem_instance.nodes[k].AOAs))
+			psi = self.problem_instance.nodes[k].AOAs[aoa_indices].generate_uniform_angle()
+			tau = (psi + np.pi + np.random.uniform( -self.problem_instance.eta / 2, self.problem_instance.eta / 2)) % (2 * np.pi)
+			r = random.uniform(self.problem_instance.sensing_radii[0], self.problem_instance.sensing_radii[1])
+			visits.append((k, psi, tau, r))
+			score = self.problem_instance.compute_score_of_visit((k, psi, tau, r), self.utility_function)
+
+			# Compute SDR score based on the new visit and the visit before and or after it in the route.
+			q = self.problem_instance.get_state(visits[-1])
+			if len(route) != 0:
+				# Compute distance through the visit if it is inserted into the route at index i.
+				if i == 0:
+					distance_through_visit = (compute_length_of_relaxed_dubins_path(q.angle_complement(), self.problem_instance.source, self.problem_instance.rho) +
+                               				  dubins.shortest_path(q.angle_complement().to_tuple(), self.problem_instance.get_state(route[0]).to_tuple(), self.problem_instance.rho).path_length())
+				elif i == len(route):
+					distance_through_visit = (dubins.shortest_path(self.problem_instance.get_state(route[-1]).to_tuple(), q.to_tuple(), self.problem_instance.rho).path_length() +
+							   				  compute_length_of_relaxed_dubins_path(q, self.problem_instance.sink, self.problem_instance.rho))
+				else: 
+					distance_through_visit = (dubins.shortest_path(self.problem_instance.get_state(route[i - 1]).to_tuple(), q.to_tuple(), self.problem_instance.rho).path_length() +
+							   				  dubins.shortest_path(q.to_tuple(), self.problem_instance.get_state(route[i]).to_tuple(), self.problem_instance.rho).path_length())	
+
+				sdr_scores.append(score / distance_through_visit)
+
+			else:
+				# If the route is empty, we cannot compute the SDR score, so we just append the score.
+				sdr_scores.append(score / self.problem_instance.compute_length_of_route([visits[-1]]))
+		
+		visit = visits[np.argmax(sdr_scores)]
+
 		return (k, psi, tau, r), self.problem_instance.compute_score_of_visit((k, psi, tau, r), self.utility_function)
 
 	# ------------------------------------------------------- Mutation Operators -------------------------------------------------------
@@ -543,8 +607,8 @@ if __name__ == "__main__":
     problem_instance: CEDOPADSInstance = CEDOPADSInstance.load_from_file("p4.4.g.c.a.txt", needs_plotting = True)
     mu = 256
     ga = MemeticAlgorithm(problem_instance, mu = mu, lmbda = mu * 7)
-    #import cProfile
-    #cProfile.run("ga.run(300, display_progress_bar = True)", sort = "cumtime")
+    import cProfile
+    cProfile.run("ga.run(300, display_progress_bar = True)", sort = "cumtime")
     route = ga.run(60, display_progress_bar=True, trace=True)
     augmented_route = add_free_visits(problem_instance, route, utility_function)
     print(f"Score of augmented route: {problem_instance.compute_score_of_route(augmented_route, utility_function)} from {problem_instance.compute_score_of_route(route, utility_function)}")

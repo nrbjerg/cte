@@ -4,7 +4,7 @@ from classes.problem_instances.cedopads_instances import CEDOPADSInstance, load_
 import matplotlib.pyplot as plt
 from typing import Optional, Set, List, Dict, Tuple, Iterator
 from classes.data_types import State, Position, Dir, compute_difference_between_angles, Angle
-from library.core.dubins.dubins_api import call_dubins, sample_dubins_path
+from library.core.dubins.dubins_api import call_dubins, sample_dubins_path, compute_minimum_distance_to_point_from_dubins_path_segment
 from library.core.dubins.relaxed_dubins import compute_length_of_relaxed_dubins_path
 
 import dubins 
@@ -38,61 +38,6 @@ def get_equidistant_samples(problem: CEDOPADSInstance, k: int) -> Iterator[Tuple
             yield (k, psi, (psi + np.pi - problem.eta / 4.5) % (2 * np.pi), r)
             yield (k, psi, (psi + np.pi + problem.eta / 4.5) % (2 * np.pi), r)
 
-def get_close_enough_node_ids(problem: CEDOPADSInstance, unvisited_nodes: Set[int], q0: State, q1: State) -> Set[int]:
-    """generate a list of nodes which lies sufficently close to the path segment from q0 to q1, this function is only 
-    used to limit the search space of the actual operator""" 
-    dubins_path_typ, dubins_path_segment_lengths = call_dubins(q0, q1, problem.rho)
-    
-    # Check which nodes are sufficently close to the first center point
-    if dubins_path_typ[0] == Dir.L: 
-        first_center = q0.pos + problem.rho * np.array([np.cos(q0.angle + np.pi / 2), np.sin(q0.angle + np.pi / 2)]) 
-    else:
-        first_center = q0.pos + problem.rho * np.array([np.cos(q0.angle - np.pi / 2), np.sin(q0.angle - np.pi / 2)]) 
-
-    close_enough_to_first_segment = {node_idx for node_idx in unvisited_nodes if np.linalg.norm(first_center - problem.nodes[node_idx].pos) <= 2 * problem.sensing_radii[1]}
-
-    # Check if the points are close enough to the second segment if it is either a staright line segment or a turn.
-    angle_diff = dubins_path_segment_lengths[0] / problem.rho
-    heading_after_first_turn = (q0.angle - angle_diff) % (2 * np.pi) 
-    if dubins_path_typ[1] == Dir.S:
-        close_enough_to_second_segment = set()
-
-        # Compute the end points of the line points, which will be used to compute the minimum length from the straight line segment.
-        start_pos = first_center + problem.rho * np.array([np.cos(q0.angle + np.pi / 2 - angle_diff), np.sin(q0.angle + np.pi / 2 - angle_diff)])
-        end_pos = first_center + dubins_path_segment_lengths[1] * np.array([np.cos(heading_after_first_turn), np.sin(heading_after_first_turn)])
-
-        for node_idx in unvisited_nodes:
-            pos = problem.nodes[node_idx].pos
-            # Compute the length between the line segment between position i and position j and the point at position k
-            # link to an explaination of the formula: https://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line
-            area = np.abs((start_pos[1] - end_pos[1]) * pos[0] - (start_pos[0] - end_pos[0]) * pos[1] + start_pos[0] * end_pos[1] - start_pos[1] * end_pos[0])
-
-            distance = area / dubins_path_segment_lengths[1]  
-
-            if distance <= problem.sensing_radii[1]:
-                close_enough_to_second_segment.add(node_idx)
-    
-    else: 
-        if dubins_path_typ[1] == Dir.L:
-            pos_after_first_turn = first_center + problem.rho * np.array([np.cos(q0.angle + np.pi / 2 - angle_diff), np.sin(q0.angle + np.pi / 2 - angle_diff)]) 
-            second_center = pos_after_first_turn + problem.rho *  np.array([np.cos(heading_after_first_turn + np.pi / 2), np.sin(heading_after_first_turn + np.pi / 2)])
-        else:
-            pos_after_first_turn = first_center + problem.rho * np.array([np.cos(q0.angle - np.pi / 2 + angle_diff), np.sin(q0.angle - np.pi / 2 + angle_diff)]) 
-            second_center = pos_after_first_turn + problem.rho * np.array([np.cos(heading_after_first_turn - np.pi / 2), np.sin(heading_after_first_turn - np.pi / 2)])
-
-        close_enough_to_second_segment = {node_idx for node_idx in unvisited_nodes if np.linalg.norm(second_center - problem.nodes[node_idx].pos) <= 2 * problem.sensing_radii[1]}
-        
-
-    # Check which nodes are sufficently close to the final center point
-    if dubins_path_typ[2] == Dir.L: 
-        final_center = q1.pos + problem.rho * np.array([np.cos(q1.angle + np.pi / 2), np.sin(q1.angle + np.pi / 2)]) 
-    else:
-        final_center = q1.pos + problem.rho * np.array([np.cos(q1.angle - np.pi / 2), np.sin(q1.angle - np.pi / 2)]) 
-
-    close_enough_to_third_segment = {node_idx for node_idx in unvisited_nodes if np.linalg.norm(final_center - problem.nodes[node_idx].pos) < problem.sensing_radii[1]}
-    
-    return close_enough_to_first_segment.union(close_enough_to_second_segment).union(close_enough_to_third_segment)
-
 # TODO: For now this only works on the non-relaxed dubins paths, an upgrade could be made to get it to work with the relaxed dubins path segments aswell.
 def add_free_visits(problem: CEDOPADSInstance, route: CEDOPADSRoute, utility_function: UtilityFunction, start_idx: Optional[int] = None, end_idx: Optional[int] = None) -> CEDOPADSRoute:
     """Checks if any visits can be added for free into the route, at between the given indicies, if none are given simply add as many visists as posible."""
@@ -108,20 +53,22 @@ def add_free_visits(problem: CEDOPADSInstance, route: CEDOPADSRoute, utility_fun
 
     candidates: Dict[int, List[Visit]] = {idx: [] for idx in range(start_idx, end_idx)}
     node_ids_of_visits = set()
-    states: List[State] = problem.get_states(route[start_idx:end_idx])
+    states = problem.get_states(route[start_idx:end_idx])
     for idx, (q0, q1) in enumerate(zip(states[:-1], states[1:]), start=start_idx):
         # 1. Prune search space 
-        close_enough_node_ids = get_close_enough_node_ids(problem, unvisited_nodes, q0, q1)
-        #print(close_enough_node_ids)
+        (seg_types, seg_lengths) = call_dubins(q0, q1, problem.rho)
+
+        close_enough_node_ids = list(filter(lambda k: compute_minimum_distance_to_point_from_dubins_path_segment(problem.nodes[k].pos, q0, seg_types, seg_lengths, problem.rho) < problem.sensing_radii[1], unvisited_nodes))
 
         # 2. Sample path and check if they are within the zones of aqusion of one or more nodes.
-        #print(len(dubins.path_sample(q0.to_tuple(), q1.to_tuple(), problem.rho, problem.sensing_radii[1] - problem.sensing_radii[0])))
         if len(close_enough_node_ids) == 0:
             continue
 
-
         #dubins.path_sample(q0.to_tuple(), q1.to_tuple(), problem.rho, (problem.sensing_radii[1] - problem.sensing_radii[0])[0]:
-        for configuration in sample_dubins_path(q0, q1, problem.rho, (problem.sensing_radii[1] - problem.sensing_radii[0])):
+        for configuration in sample_dubins_path(q0, q1, problem.rho, (problem.sensing_radii[1] - problem.sensing_radii[0])): 
+            # TODO: the line above needs to be changed to fit with the new API
+            
+            
             #plt.scatter(*configuration.pos, color = "tab:red")
             # Check if each candidate is within the FOV from the configuration and if the configuration lies within one of the AOAs
             for k in close_enough_node_ids:

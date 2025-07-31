@@ -247,7 +247,7 @@ class CEDOPADSInstance:
 
         tups = [q.to_tuple() for q in qs]
         return ([compute_length_of_relaxed_dubins_path(qs[0].angle_complement(), self.source, self.rho)] + 
-                [dubins.shortest_path(tups[i], tups[i + 1], self.rho).path_length() for i in range(len(qs) - 1) if tups[i] != tups[i + 1]] +
+                [dubins.shortest_path(tups[i], tups[i + 1], self.rho).path_length() for i in range(len(qs) - 1)] +
                 [compute_length_of_relaxed_dubins_path(qs[-1], self.sink, self.rho)])
 
     def compute_score_of_route(self, route: CEDOPADSRoute, utility_function: UtilityFunction) -> float:
