@@ -25,19 +25,19 @@ for idx, file_id in enumerate(os.listdir(path_to_instances)):
             zetas = [phi + np.random.exponential(size=1)[0] for phi in phis]
             assert all([phi <= zeta for phi, zeta in zip(phis, zetas)])
 
-            # Check for overlap and remove indicies if needed
+            # Check for overlap and remove indices if needed
             Js = [AngleInterval(theta - phi, theta + phi) for theta, phi in zip(thetas, phis)]
 
-            indicies_to_remove = []
+            indices_to_remove = []
             for i in range(ell): 
                 for j in range(i + 1, ell):
-                    if i in indicies_to_remove:
+                    if i in indices_to_remove:
                         continue
 
-                    if (j not in indicies_to_remove) and (Js[i].intersects(Js[j]) or Js[j].intersects(Js[i])):
-                        indicies_to_remove.append(j)
+                    if (j not in indices_to_remove) and (Js[i].intersects(Js[j]) or Js[j].intersects(Js[i])):
+                        indices_to_remove.append(j)
 
-            for i in reversed(indicies_to_remove):
+            for i in reversed(indices_to_remove):
                 thetas.pop(i)
                 phis.pop(i)
                 zetas.pop(i)

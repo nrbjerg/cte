@@ -60,8 +60,8 @@ class GA:
         self.sensing_radius = sensing_radius
         self.mu = mu
         self.number_of_nodes = len(self.problem.nodes)
-        self.node_indicies = set(range(self.number_of_nodes))
-        self.node_indicies_arrray = np.array(range(self.number_of_nodes))
+        self.node_indices = set(range(self.number_of_nodes))
+        self.node_indices_arrray = np.array(range(self.number_of_nodes))
         
         # Compute distances which will be used to guide the mutation operator
         positions = np.concat((np.array([node.pos for node in problem.nodes]), problem.source.reshape(1, 2), problem.sink.reshape(1, 2)))
@@ -88,7 +88,7 @@ class GA:
         # maybe we pick them with a probability which is propotional to the distance to the individual?
         blacklist = set(k for (k, _, _) in individual)
 
-        k = random.choice(list(self.node_indicies.difference(blacklist)))
+        k = random.choice(list(self.node_indices.difference(blacklist)))
         psi = random.choice(self.problem.nodes[k].intervals).generate_uniform_angle()
         tau = (psi + np.pi + np.random.uniform( - self.eta / 2, self.eta / 2)) % (2 * np.pi)
 
@@ -105,7 +105,7 @@ class GA:
 
         weights = self.sdrs_for_overwrite[self.mask_for_overwrite]
         probs =  weights / np.sum(weights)
-        k = np.random.choice(self.node_indicies_arrray[self.mask_for_overwrite], p = probs)
+        k = np.random.choice(self.node_indices_arrray[self.mask_for_overwrite], p = probs)
         psi = random.choice(self.problem.nodes[k].intervals).generate_uniform_angle()
         tau = (psi + np.pi + np.random.uniform( - self.eta / 2, self.eta / 2)) % (2 * np.pi)
 
@@ -138,7 +138,7 @@ class GA:
         assert k >= 2 and len(parents) >= 2
 
         # Pick random inidices used to create the k-point crossovers, ie. each parent gets split at the 
-        # indicies and the subparts, gets rearanged back into a set of children, if this is not posible i.e.
+        # indices and the subparts, gets rearanged back into a set of children, if this is not posible i.e.
         # if the length of the parent is less than k, simply remove it from the pool, and if we dont have
         # enough suffiicently long parents, we simply return an empty list.
         parents = [parent for parent in parents if len(parent) >= k]
@@ -146,23 +146,23 @@ class GA:
             return []
         elif len(parents) == 1:
             return parents
-        indicies = [sorted(np.random.choice(np.arange(0, len(parent)), size = k, replace = False))
+        indices = [sorted(np.random.choice(np.arange(0, len(parent)), size = k, replace = False))
                     for parent in parents]
         
-        # Generate all of the posible offspring from the given list of indicies for each parent.
+        # Generate all of the posible offspring from the given list of indices for each parent.
         offspring = []
-        for parent_indicies in combinations_with_replacement(range(len(parents)), k):
+        for parent_indices in combinations_with_replacement(range(len(parents)), k):
             
-            # Generate the child which corresponds to the parent indicies
-            for jdx in parent_indicies:
+            # Generate the child which corresponds to the parent indices
+            for jdx in parent_indices:
                 parent = parents[jdx]
                 for idx in range(k):
                     if idx == 0:
-                        child = parent[:indicies[jdx][0]]
+                        child = parent[:indices[jdx][0]]
                     elif idx == k - 1:
-                        child.extend(parent[indicies[jdx][k - 2]:])
+                        child.extend(parent[indices[jdx][k - 2]:])
                     else:
-                        child.extend(parent[indicies[jdx][idx]:indicies[jdx][idx + 1]])
+                        child.extend(parent[indices[jdx][idx]:indices[jdx][idx + 1]])
 
             # Remove dublicate visits to the same node, since these do not increase the collected score.
             seen = set()
@@ -186,12 +186,12 @@ class GA:
             
             for i, dominant_parent in enumerate(pool):
                 # Keep track of the current index in each of the parents.
-                indicies = {j: 0 if i != j else 1 for j in range(k)}
+                indices = {j: 0 if i != j else 1 for j in range(k)}
                 child = [dominant_parent[0]]
 
                 # Compute scores and distances.
                 distances, scores = {}, {}
-                for j, index in indicies.items():
+                for j, index in indices.items():
                     distances[j] = self.problem.compute_distance_between_visits(child[-1], pool[j][index], self.sensing_radius, self.rho)
                     scores[j] = self.problem.compute_score_of_visit(pool[j][index], self.eta) 
                 
@@ -203,18 +203,18 @@ class GA:
                     # Chose the next visit greedily, but make sure that we dont pick a node which
                     # has already been visited. TODO
                     greedy_idx = np.argmax(sdr_scores_of_visits)
-                    child.append(pool[greedy_idx][indicies[greedy_idx]])
+                    child.append(pool[greedy_idx][indices[greedy_idx]])
 
                     # Move the pointer for the chosen route one step ahead, and update the scores and distances accordingly.
-                    indicies[greedy_idx] += 1
-                    if indicies[greedy_idx] >= len(pool[greedy_idx]):
+                    indices[greedy_idx] += 1
+                    if indices[greedy_idx] >= len(pool[greedy_idx]):
                         # Simply pick a new random node for the 
                         pool[greedy_idx].append(self.pick_new_visit(pool[greedy_idx]))
 
-                    scores[greedy_idx] = self.problem.compute_score_of_visit(pool[greedy_idx][indicies[greedy_idx]], self.eta)
+                    scores[greedy_idx] = self.problem.compute_score_of_visit(pool[greedy_idx][indices[greedy_idx]], self.eta)
 
-                    for j, index in indicies.items():
-                        distances[j] = self.problem.compute_distance_between_visits(child[-1], pool[j][indicies[j]], self.sensing_radius, self.rho)
+                    for j, index in indices.items():
+                        distances[j] = self.problem.compute_distance_between_visits(child[-1], pool[j][indices[j]], self.sensing_radius, self.rho)
 
                     offspring.append(child[:-1])
 
@@ -267,8 +267,8 @@ class GA:
         sdr_of_visits = np.zeros(number_of_candidates)
         distances = np.zeros(number_of_candidates)
 
-        for indicies in combinations(range(len(parents)), k):
-            pool = [parents[index] for index in indicies]
+        for indices in combinations(range(len(parents)), k):
+            pool = [parents[index] for index in indices]
             
             for dominant_parent in pool:
                 # Keep track of the current index in each of the parents.
@@ -284,7 +284,7 @@ class GA:
                 while total_distance + compute_length_of_relaxed_dubins_path(q, self.problem.sink, self.rho) < t_max:
                     candidates = []
 
-                    for i, (index, parent) in enumerate(zip(indicies, pool)):
+                    for i, (index, parent) in enumerate(zip(indices, pool)):
                         # Make sure that every route in the pool has an appropriate length and that we have not already visited the greedily chosen node.
                         for j, l in enumerate(range(pointer, pointer + n)):
                             if l >= len(parent) or seen[parent[l][0]] == 1: # TODO: Maybe this can chosen better using the sdr tensor.
@@ -327,8 +327,8 @@ class GA:
         sdr_of_visits = np.zeros(number_of_candidates)
         distances = np.zeros(number_of_candidates)
 
-        for indicies in combinations(range(len(parents)), k):
-            pool = [parents[index] for index in indicies]
+        for indices in combinations(range(len(parents)), k):
+            pool = [parents[index] for index in indices]
             
             for dominant_parent in pool:
                 # Keep track of the current index in each of the parents.
@@ -344,7 +344,7 @@ class GA:
                 while total_distance + compute_length_of_relaxed_dubins_path(q, self.problem.sink, self.rho) < self.t_max:
                     candidates = []
 
-                    for i, (index, parent) in enumerate(zip(indicies, pool)):
+                    for i, (index, parent) in enumerate(zip(indices, pool)):
                         # Make sure that every route in the pool has an appropriate length and that we have  already visited the greedily chosen node.
                         for j, l in enumerate(range(pointer, pointer + n)):
                             if l >= len(parent) or seen[parent[l][0]] == 1:
@@ -407,8 +407,8 @@ class GA:
 
         while np.random.uniform(0, 1) < p_s and len(individual) >= 2: 
             # Swap two random visists along the route described by the individual.
-            indicies = np.random.choice(len(individual), size = 2, replace = False)
-            individual[indicies[0]], individual[indicies[1]] = individual[indicies[1]], individual[indicies[0]]
+            indices = np.random.choice(len(individual), size = 2, replace = False)
+            individual[indices[0]], individual[indices[1]] = individual[indices[1]], individual[indices[0]]
 
         return self.fix_length(self.angle_mutation(individual, q))
 
@@ -533,8 +533,8 @@ class GA:
 
     # --------------------------------------- Sampling of parents --------------------------------------- #
     def stochastic_universal_sampling (self, cdf: ArrayLike, m: int) -> List[int]:
-        """Implements the SUS algortihm, used to sample the indicies of m parents from the population."""
-        indicies = [None for _ in range(m)] 
+        """Implements the SUS algortihm, used to sample the indices of m parents from the population."""
+        indices = [None for _ in range(m)] 
         i, j = 0, 0
         r = np.random.uniform(0, 1 / m)
 
@@ -543,17 +543,17 @@ class GA:
         # the offset for each of the indicators is 1 / m)
         while i < m:
             while r <= cdf[j]:
-                indicies[i] = j 
+                indices[i] = j 
                 r += 1 / m
                 i += 1
             
             j += 1
 
-        return indicies
+        return indices
 
     def roulette_wheel (self, cdf: ArrayLike, m: int) -> List[int]:
-        """Implements roulette wheel sampling, to sample the indicies of m parents from the population."""
-        indicies = []
+        """Implements roulette wheel sampling, to sample the indices of m parents from the population."""
+        indices = []
 
         # Basically we just sample the population according to the probabilities given indirectly by the CDF
         # which corresponds to spinning m roulette wheels where the lengths of each segment is proportional to
@@ -564,9 +564,9 @@ class GA:
             while r <= cdf[i] or i == self.mu - 1:
                 i += 1
             
-            indicies.append(i - 1)
+            indices.append(i - 1)
             
-        return indicies
+        return indices
 
     # ----------------------------------------- Survivor Selection -------------------------------------- #
     def mu_plus_lambda_selection(self, offspring: List[CEDOPADSRoute], ratio_of_time_used: float) -> List[CEDOPADSRoute]:
@@ -574,29 +574,29 @@ class GA:
         # NOTE: Recall that the fitness is time dependent hence we need to recalculate it for the parents.
         fitnesses_of_parents_and_offspring = np.array(list(map(lambda child: self.fitness_function(child, ratio_of_time_used), self.population + offspring)))
 
-        # Calculate the indicies of the best performing memebers
-        indicies_of_new_generation = np.argsort(fitnesses_of_parents_and_offspring)[-self.mu:]
+        # Calculate the indices of the best performing memebers
+        indices_of_new_generation = np.argsort(fitnesses_of_parents_and_offspring)[-self.mu:]
         
         # Simply set the new fitnesses which have been calculated recently.
-        self.fitnesses = fitnesses_of_parents_and_offspring[indicies_of_new_generation]
+        self.fitnesses = fitnesses_of_parents_and_offspring[indices_of_new_generation]
 
-        return [self.population[i] if i < self.mu else offspring[i - self.mu] for i in indicies_of_new_generation]
+        return [self.population[i] if i < self.mu else offspring[i - self.mu] for i in indices_of_new_generation]
 
     def mu_comma_lambda_selection(self, offspring: List[CEDOPADSRoute], ratio_of_time_used: float) -> List[CEDOPADSRoute]:
         """Picks the mu offspring with the highest fitnesses to populate the the next generation, note this is done with elitism."""
         fitnesses_of_offspring = np.array(list(map(lambda child: self.fitness_function(child, ratio_of_time_used), offspring)))
 
-        # Calculate the indicies of the best performing memebers
-        indicies_of_new_generation = np.argsort(fitnesses_of_offspring)[-self.mu:]
+        # Calculate the indices of the best performing memebers
+        indices_of_new_generation = np.argsort(fitnesses_of_offspring)[-self.mu:]
 
-        if fitnesses_of_offspring[indicies_of_new_generation[0]] < self.highest_fitness_recorded:
+        if fitnesses_of_offspring[indices_of_new_generation[0]] < self.highest_fitness_recorded:
             # Use elitism
-            self.fitnesses = fitnesses_of_offspring[indicies_of_new_generation[:-1]] + [self.highest_fitness_recorded]
-            return [offspring[i] for i in indicies_of_new_generation[:-1]] + [self.individual_with_highest_score]
+            self.fitnesses = fitnesses_of_offspring[indices_of_new_generation[:-1]] + [self.highest_fitness_recorded]
+            return [offspring[i] for i in indices_of_new_generation[:-1]] + [self.individual_with_highest_score]
         else:
             # Simply set the new fitnesses which have been calculated recently.
-            self.fitnesses = fitnesses_of_offspring[indicies_of_new_generation]
-            return [offspring[i] for i in indicies_of_new_generation]
+            self.fitnesses = fitnesses_of_offspring[indices_of_new_generation]
+            return [offspring[i] for i in indices_of_new_generation]
 
     # -------------------------------------------- Main Loop of GA --------------------------------------- #
     def run(self, time_budget: float, m: int, parent_selection_mechanism: Callable[[], List[CEDOPADSRoute]], crossover_mechanism: Callable[[List[CEDOPADSRoute]], List[CEDOPADSRoute]], survivor_selection_mechanism: Callable[[List[CEDOPADSRoute], float], ArrayLike], p_c: float, progress_bar: bool = False) -> CEDOPADSRoute:
@@ -650,9 +650,9 @@ class GA:
                 states = [[self.problem.nodes[k].get_state(self.sensing_radius, psi, tau) for (k, psi, tau) in parent] for parent in self.population]
                 offspring = []
                 for i in range(self.mu * p_c):
-                    parent_indicies = self.stochastic_universal_sampling(cdf, m = m)
+                    parent_indices = self.stochastic_universal_sampling(cdf, m = m)
                     
-                    for child in crossover_mechanism([self.population[i] for i in parent_indicies], [scores[i] for i in parent_indicies], [states[i] for i in parent_indicies]): 
+                    for child in crossover_mechanism([self.population[i] for i in parent_indices], [scores[i] for i in parent_indices], [states[i] for i in parent_indices]): 
                         mutated_child = self.mutate(child, p_s = 0.2, p_i = 0.3, p_r = 0.2, q = 0.1)
                         
                         # TODO: implement a local search improvement operator, ie. convert

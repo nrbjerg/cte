@@ -230,14 +230,14 @@ def grasp(problem: CPM_RTOP_Instance, time_budget: int, p: float, use_centroids:
     return best_candidate_solution
 
 def greedy_cpm(problem_instance: CPM_RTOP_Instance, routes: List[Route], intercepter: InterceptionRoute) -> InterceptionRoute:
-    """Greedily choses the route indicies (based on the heuristic score * risk of becomming non-operational after intercept / distance to intercept.) and produces an interception route, from this."""
-    route_indicies = []
+    """Greedily choses the route indices (based on the heuristic score * risk of becomming non-operational after intercept / distance to intercept.) and produces an interception route, from this."""
+    route_indices = []
 
-    candidate_route_indicies = list(range(len(routes)))
-    while len(candidate_route_indicies) != 0:
+    candidate_route_indices = list(range(len(routes)))
+    while len(candidate_route_indices) != 0:
         pass 
 
-    return intercepter(route_indicies, routes)
+    return intercepter(route_indices, routes)
 
 
 if __name__ == "__main__":

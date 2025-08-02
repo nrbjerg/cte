@@ -67,15 +67,15 @@ class Cluster:
 
         else:
             # We make the cuts here
-            indicies_to_pop = []
+            indices_to_pop = []
             for (i, elem) in enumerate(self.elements):
                 if type(elem) == Cluster and depth != 1:
                     elem.discard_unvisited_clusters(visited_clusters, depth - 1)
                 elif (type(elem) == Node and elem.node_id not in visited_clusters) or (type(elem) == Cluster and elem.id not in visited_clusters):
-                    indicies_to_pop.append(i)
+                    indices_to_pop.append(i)
 
             # Actually pop the approriate elements
-            for i in reversed(indicies_to_pop):
+            for i in reversed(indices_to_pop):
                 self.elements.pop(i)
 
 @dataclass()

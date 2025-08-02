@@ -32,10 +32,10 @@ class GenericSubProblem:
     scores: Vector 
     source_and_sink_candidates: Dict[int, List[int]] 
 
-    def convert_to_concrete_subproblem(self, prev_cluster_indicies: List[int], next_cluster_indices: List[int], t_maxes: List[float]) -> ConcreteSubProblem:
+    def convert_to_concrete_subproblem(self, prev_cluster_indices: List[int], next_cluster_indices: List[int], t_maxes: List[float]) -> ConcreteSubProblem:
         """Converts the generic subproblem into a concrete subproblem"""
-        K = len(prev_cluster_indicies)
-        return ConcreteSubProblem(self.positions, self.scores, K, t_maxes, [self.source_and_sink_candidates[m] for m in prev_cluster_indicies], [self.source_and_sink_candidates[m] for m in next_cluster_indices])
+        K = len(prev_cluster_indices)
+        return ConcreteSubProblem(self.positions, self.scores, K, t_maxes, [self.source_and_sink_candidates[m] for m in prev_cluster_indices], [self.source_and_sink_candidates[m] for m in next_cluster_indices])
 
 def plot_sub_problem(sub_problem: Union[GenericSubProblem, GenericSubProblem], color: str, marker: str, score_bounds: Tuple[float, float] = None):
     """Plots a generic or concrete subproblem"""
@@ -107,7 +107,7 @@ class GenericSubProblemGraph:
             for (v, u) in self.inter_cluster_edges[m0]:
                 source_and_sink_candidates[vertex_to_cluster_map[u]] = source_and_sink_candidates.get(vertex_to_cluster_map[u], []) + [v]
                 
-            # Convert the source and sink candidates to their local indicies within the cluster
+            # Convert the source and sink candidates to their local indices within the cluster
             for m1, candidates in source_and_sink_candidates.items():
                 source_and_sink_candidates[m1] = [cluster.index(i) for i in candidates]
 

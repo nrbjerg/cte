@@ -26,8 +26,8 @@ class Baseline_GA:
 
     # --------------------------------------- Sampling of parents --------------------------------------- #
     def stochastic_universal_sampling (self, cdf: Vector, m: int) -> List[int]:
-        """Implements the SUS algortihm, used to sample the indicies of m parents from the population."""
-        indicies = [None for _ in range(m)] 
+        """Implements the SUS algortihm, used to sample the indices of m parents from the population."""
+        indices = [None for _ in range(m)] 
         i, j = 0, 0
         r = np.random.uniform(0, 1 / m)
 
@@ -36,25 +36,25 @@ class Baseline_GA:
         # the offset for each of the indicators is 1 / m)
         while i < m:
             while r <= cdf[j]:
-                indicies[i] = j 
+                indices[i] = j 
                 r += 1 / m
                 i += 1
             
             j += 1
 
-        return indicies
+        return indices
 
     # ----------------------------------------- Survivor Selection -------------------------------------- #
     def mu_comma_lambda_selection(self, offspring: List[Individual]) -> List[Individual]:
         """Picks the mu offspring with the highest fitnesses to populate the the next generation, note this is done with elitism."""
         fitnesses_of_offspring = np.array(list(map(lambda child: self.fitness_function(child), offspring)))
 
-        # Calculate the indicies of the best performing memebers
-        indicies_of_new_generation = np.argsort(fitnesses_of_offspring)[-self.mu:]
+        # Calculate the indices of the best performing memebers
+        indices_of_new_generation = np.argsort(fitnesses_of_offspring)[-self.mu:]
 
         # Simply set the new fitnesses which have been calculated recently.
-        self.fitnesses = fitnesses_of_offspring[indicies_of_new_generation]
-        return [offspring[i] for i in indicies_of_new_generation]
+        self.fitnesses = fitnesses_of_offspring[indices_of_new_generation]
+        return [offspring[i] for i in indices_of_new_generation]
 
     def run(self, time_budget: float = 300):
         """Runs the baseline genetic algorithm."""

@@ -57,18 +57,18 @@ def random_policy_value_estimation() -> ArrayLike:
         # Generate episode
         s = random.choice(list(connected_states.keys())) # Pick a random initial state
 
-        first_visits_indicies = dict()
+        first_visits_indices = dict()
         for i in count():
             if s in [0, 15]:
-                first_visits_indicies[s] = i
+                first_visits_indices[s] = i
                 break
 
-            first_visits_indicies[s] = first_visits_indicies.get(s, i) 
+            first_visits_indices[s] = first_visits_indices.get(s, i) 
 
             s = random.choice(connected_states[s])
 
         # Update values
-        for s, j in first_visits_indicies.items():
+        for s, j in first_visits_indices.items():
             returns[s].append(-(i - j))
     
     return np.array([np.mean(returns[s]) for s in range(16)]).reshape((4, 4))

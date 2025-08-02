@@ -14,9 +14,9 @@ class InterceptionRoute:
     # Contains a list of interception positions
     interception_points: List[Position]
     interception_times: List[float]
-    route_indicies: List[int] # The indicies of the routes which are intercepted.
+    route_indices: List[int] # The indices of the routes which are intercepted.
 
-    def __init__(self, route_indicies: List[int], routes: List[Route], velocity: float, delay: float, initial_position: Position, terminal_position: Position):
+    def __init__(self, route_indices: List[int], routes: List[Route], velocity: float, delay: float, initial_position: Position, terminal_position: Position):
         """Initializes the intercepter and performs initial computation of interception points and times."""
         pass # NOTE: should be implemented in the children
 
@@ -40,7 +40,7 @@ class InterceptionRoute:
         """Checks if the given route can be intercepted after the final interception point."""
         pass # NOTE: should be implemented in the children
         
-        if route_index == self.route_indicies[-1]:
+        if route_index == self.route_indices[-1]:
             return False
         
 

@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 @dataclass
 class CEDOPADSRouteInfo:
-    indicies: List[Tuple[int, int]] # k & i which can be used to get the states by  
+    indices: List[Tuple[int, int]] # k & i which can be used to get the states by  
     scores: List[float]
     lengths: List[float]
 
@@ -32,27 +32,27 @@ class GRASP:
     def greedy(self, p = 1.0) -> CEDOPADSRouteInfo:
         """Greedily constructs a CEDOPADS route"""
         remaining_distance = self.problem_instance.t_max
-        indicies = []
+        indices = []
         scores = []
         lengths = []
 
         # 1. Pick first visit 
-        candidate_indicies = {}
+        candidate_indices = {}
         unvisited_nodes = {k for k in range(len(self.problem_instance.nodes))}
         for k in unvisited_nodes:
             for i, score in enumerate(self.scores[k]):
-                candidate_indicies[(k, i)] = score / self.distances_from_source[(k, i)]
+                candidate_indices[(k, i)] = score / self.distances_from_source[(k, i)]
 
         # Pick a random node from the RCL list, if p = 1.0, simply use a normal greedy algorithm
         if p < 1.0:
-            N = int(np.ceil(len(candidate_indicies) * (1 - p)))
+            N = int(np.ceil(len(candidate_indices) * (1 - p)))
         else:
             N = 1
 
-        rcl = [tup[0] for tup in sorted(candidate_indicies.items(), key = lambda tup: tup[1], reverse=True)[:N]] 
+        rcl = [tup[0] for tup in sorted(candidate_indices.items(), key = lambda tup: tup[1], reverse=True)[:N]] 
         k0, i0 = rcl[np.random.randint(0, len(rcl))]
         unvisited_nodes.remove(k0)
-        indicies.append((k0, i0))
+        indices.append((k0, i0))
         scores.append(self.scores[k0][i0])
         lengths.append(self.distances_from_source[(k0, i0)])
 
@@ -61,7 +61,7 @@ class GRASP:
 
         # 2. Keep going until we reach the sink, in each of the routes.
         while True:
-            candidate_indicies = {}
+            candidate_indices = {}
             q0 = self.states[k0][i0].to_tuple()
             for k in unvisited_nodes:
                 for i, score in enumerate(self.scores[k]):
@@ -73,21 +73,21 @@ class GRASP:
                     length = self.distances[key]
 
                     if self.distances_to_sink[(k, i)] + length <= remaining_distance:
-                        candidate_indicies[(k, i)] = score / length
+                        candidate_indices[(k, i)] = score / length
 
-            if len(candidate_indicies) == 0:
+            if len(candidate_indices) == 0:
                 break
 
             # Pick a random node from the RCL list, if p = 1.0, simply use a normal greedy algorithm
             if p < 1.0:
-                N = int(np.ceil(len(candidate_indicies) * (1 - p)))
+                N = int(np.ceil(len(candidate_indices) * (1 - p)))
             else:
                 N = 1
 
-            rcl = [tup[0] for tup in sorted(candidate_indicies.items(), key = lambda tup: tup[1], reverse=True)[:N]] 
+            rcl = [tup[0] for tup in sorted(candidate_indices.items(), key = lambda tup: tup[1], reverse=True)[:N]] 
             k, i = rcl[np.random.randint(0, len(rcl))]
             unvisited_nodes.remove(k)
-            indicies.append((k, i))
+            indices.append((k, i))
             scores.append(self.scores[k][i])
             lengths.append(self.distances[((k0, i0), (k, i))])
             k0, i0 = k, i
@@ -95,21 +95,21 @@ class GRASP:
             # Compute the remaning distance.
             remaining_distance -= lengths[-1] 
 
-        lengths.append(self.distances_to_sink[indicies[-1]])
+        lengths.append(self.distances_to_sink[indices[-1]])
 
-        return CEDOPADSRouteInfo(indicies, scores, lengths)
+        return CEDOPADSRouteInfo(indices, scores, lengths)
 
     def remove_visit (self, info: CEDOPADSRouteInfo) -> Tuple[CEDOPADSRouteInfo, float, float]:
         """Remove the worst performing node (measured via the SDR) from the route."""
-        if len(info.indicies) == 1:
+        if len(info.indices) == 1:
             new_length = np.linalg.norm(self.problem_instance.source - self.problem_instance.sink)
             return (CEDOPADSRouteInfo([], [], [new_length]), new_length - sum(info.lengths), -info.scores[0])
             
         # Contains the new lengths if the visit at index idx is skipped.
-        new_lengths_from_skipping = [self.distances_from_source[info.indicies[1]]]
-        for idx in range(1, len(info.indicies) - 1):
-            k0, i0 = info.indicies[idx - 1]
-            k1, i1 = info.indicies[idx + 1]
+        new_lengths_from_skipping = [self.distances_from_source[info.indices[1]]]
+        for idx in range(1, len(info.indices) - 1):
+            k0, i0 = info.indices[idx - 1]
+            k1, i1 = info.indices[idx + 1]
 
             if not (((k0, i0), (k1, i1)) in self.distances.keys()):
                 # Compute distances.
@@ -118,7 +118,7 @@ class GRASP:
  
             new_lengths_from_skipping.append(self.distances[((k0, i0), (k1, i1))])
 
-        new_lengths_from_skipping.append(self.distances_to_sink[info.indicies[-2]])
+        new_lengths_from_skipping.append(self.distances_to_sink[info.indices[-2]])
 
         # Find the index of the lowest sdr score. i.e. the one where we save the most distance for the least penality in score
         sdr_scores = [(score / ((length_before + length_after) - new_length_from_skipping)) for (score, new_length_from_skipping, length_before, length_after) in zip(info.scores, new_lengths_from_skipping, info.lengths[:-1], info.lengths[1:])]
@@ -129,36 +129,36 @@ class GRASP:
         change_in_length = new_lengths_from_skipping[idx] - (info.lengths[idx] + info.lengths[idx + 1]) 
         change_in_score = -info.scores[idx]
 
-        # Update indicies ect.
-        new_indicies = info.indicies[:idx] + info.indicies[idx + 1:]
+        # Update indices ect.
+        new_indices = info.indices[:idx] + info.indices[idx + 1:]
         new_scores = info.scores[:idx] + info.scores[idx + 1:]
 
         if idx == 0:
             new_lengths = [new_lengths_from_skipping[0]] + info.lengths[2:]
-        elif idx == len(info.indicies): # Remember this is one less than it was before.
+        elif idx == len(info.indices): # Remember this is one less than it was before.
             new_lengths = info.lengths[:-2] + [new_lengths_from_skipping[-1]]
         else:
             new_lengths = info.lengths[:idx] + [new_lengths_from_skipping[idx]] + info.lengths[idx + 2:]
 
-        return (CEDOPADSRouteInfo(new_indicies, new_scores, new_lengths), change_in_length, change_in_score)
+        return (CEDOPADSRouteInfo(new_indices, new_scores, new_lengths), change_in_length, change_in_score)
 
     def add_visit (self, info: CEDOPADSRouteInfo) -> bool:
         """Greedily add a visit to the route, if posible, otherwise return None"""
         remaining_distance = self.problem_instance.t_max - sum(info.lengths)
 
-        candiate_nodes = {k for k in range(len(self.problem_instance.nodes))}.difference([k for k, _ in info.indicies])
+        candiate_nodes = {k for k in range(len(self.problem_instance.nodes))}.difference([k for k, _ in info.indices])
 
         index_for_insertion = None
-        best_indicies: Tuple[int, int] = None
+        best_indices: Tuple[int, int] = None
         best_sdr = -np.inf
         best_lengths: Tuple[float, float] = (0, 0)
 
         # Check if the new visit should be inserted before the first visit
-        q0 = self.states[info.indicies[0][0]][info.indicies[0][1]].to_tuple()
+        q0 = self.states[info.indices[0][0]][info.indices[0][1]].to_tuple()
         for k in candiate_nodes:
             # Compute distances from the visit that we are considering to info.states[0] in case they have not already been computed.
             for i in range(len(self.visits[k])):
-                key = ((k, i), info.indicies[0])
+                key = ((k, i), info.indices[0])
                 if not (key in self.distances.keys()):
                    self.distances[key] = dubins.shortest_path(self.states[k][i].to_tuple(), q0, self.problem_instance.rho).path_length()
 
@@ -166,11 +166,11 @@ class GRASP:
                 if change_in_length <= remaining_distance and (sdr := self.scores[k][i] / change_in_length) > best_sdr:
                     best_sdr = sdr
                     best_lengths = (self.distances_from_source[(k, i)], self.distances[key])
-                    best_indicies = (k, i)
+                    best_indices = (k, i)
                     index_for_insertion = 0               
                
         # Check if the visit should be inserted in the middle of the route.
-        for j, (idxs, jdxs) in enumerate(zip(info.indicies[:-1], info.indicies[1:])):
+        for j, (idxs, jdxs) in enumerate(zip(info.indices[:-1], info.indices[1:])):
             previous_length = info.lengths[j + 1] # NOTE: The first length is the length from the source to the first visit.
             q0, q1 = self.states[idxs[0]][idxs[1]].to_tuple(), self.states[jdxs[0]][jdxs[1]].to_tuple()
             for k in candiate_nodes:
@@ -188,15 +188,15 @@ class GRASP:
                     if change_in_length <= remaining_distance and (sdr := self.scores[k][i] / change_in_length) > best_sdr:
                         best_sdr = sdr
                         best_lengths = (self.distances[key0], self.distances[key1])
-                        best_indicies = (k, i)
+                        best_indices = (k, i)
                         index_for_insertion = j + 1
                
         # Check if the visit should be insert at the end of the route.
-        q0 = self.states[info.indicies[-1][0]][info.indicies[-1][1]].to_tuple()
+        q0 = self.states[info.indices[-1][0]][info.indices[-1][1]].to_tuple()
         for k in candiate_nodes:
             # Compute distances from the visit that we are considering to info.states[0] in case they have not already been computed.
             for i in range(len(self.visits[k])):
-                key = (info.indicies[-1], (k, i))
+                key = (info.indices[-1], (k, i))
                 if not (key in self.distances.keys()):
                    self.distances[key] = dubins.shortest_path(q0, self.states[k][i].to_tuple(), self.problem_instance.rho).path_length()
 
@@ -204,21 +204,21 @@ class GRASP:
                 if change_in_length <= remaining_distance and (sdr := self.scores[k][i] / change_in_length) > best_sdr:
                     best_sdr = sdr
                     best_lengths = (self.distances[key], self.distances_to_sink[(k, i)])
-                    best_indicies = (k, i)
-                    index_for_insertion = len(info.indicies) 
+                    best_indices = (k, i)
+                    index_for_insertion = len(info.indices) 
 
         # We did not find any visits which could be included into the route.
-        if best_indicies is None:
+        if best_indices is None:
             return False
         
         # Do the actual insertion, into the route 
-        info.indicies.insert(index_for_insertion, best_indicies)       
-        info.scores.insert(index_for_insertion, self.scores[best_indicies[0]][best_indicies[1]])
+        info.indices.insert(index_for_insertion, best_indices)       
+        info.scores.insert(index_for_insertion, self.scores[best_indices[0]][best_indices[1]])
 
         if index_for_insertion == 0:
             info.lengths.insert(index_for_insertion, best_lengths[0])
             info.lengths[1] = best_lengths[1]
-        elif index_for_insertion == len(info.indicies):
+        elif index_for_insertion == len(info.indices):
             info.lengths.insert(index_for_insertion, best_lengths[1])
             info.lengths[-2] = best_lengths[0]
         else:
@@ -253,7 +253,7 @@ class GRASP:
 
     def convert_info_to_route(self, info: CEDOPADSRouteInfo) -> CEDOPADSRoute:
         """Converts an info object to an actual route."""
-        return [self.visits[k][i] for k, i in info.indicies]
+        return [self.visits[k][i] for k, i in info.indices]
 
     def run(self, time_budget: float, p: float, sampler: Callable[[CEDOPADSInstance, int], Iterator[Tuple[Angle, Angle]]], verbose: bool = False) -> CEDOPADSRoute:
         """Runs the GRASP algorithm upon the problem instance to obtain a route."""

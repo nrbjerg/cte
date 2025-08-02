@@ -27,7 +27,7 @@ def compute_CPM_RTOP_scores(problem_instance: CPM_RTOP_Instance, routes: List[Ro
         if k >= len(routes) or k < 0:
             raise ValueError(f"Invalid k={k} supplied!")
         
-        if i < len(cpm_route.route_indicies): 
+        if i < len(cpm_route.route_indices): 
             # In this case compute the probability that UAV k remains operational until the CPM has reached point i
             time_of_ith_interception = cpm_route.time_until_interception(i)
             j = max(idx for idx, visit_time in enumerate(routes[k].visit_times) if visit_time > time_of_ith_interception)
@@ -40,7 +40,7 @@ def compute_CPM_RTOP_scores(problem_instance: CPM_RTOP_Instance, routes: List[Ro
     # Compute expected score of CPM 
     expected_score_of_cpm = 0
     nodes_whose_scores_have_already_been_extracted_by_cpm = set()
-    for i, k in enumerate(cpm_route.route_indicies):
+    for i, k in enumerate(cpm_route.route_indices):
         time_of_ith_interception = cpm_route.time_until_interception(i)
 
         j = max(idx for idx, visit_time in enumerate(routes[k].visit_times) if visit_time < time_of_ith_interception)
@@ -57,7 +57,7 @@ def compute_CPM_RTOP_scores(problem_instance: CPM_RTOP_Instance, routes: List[Ro
         # NOTE: we do not need sure that we dont count the scores twice if the UAV collects the scores once the route has been terminated.
         #       since we are using the set "nodes_whose_scores_have_already_been_extracted_by_cpm"!
         total_remaining_score = sum(node.score for node in set(route.nodes).difference(nodes_whose_scores_have_already_been_extracted_by_cpm))
-        expected_scores_of_uavs.append(sigma(k, len(cpm_route.route_indicies)) * total_remaining_score)
+        expected_scores_of_uavs.append(sigma(k, len(cpm_route.route_indices)) * total_remaining_score)
 
     return expected_scores_of_uavs + [expected_score_of_cpm]
 

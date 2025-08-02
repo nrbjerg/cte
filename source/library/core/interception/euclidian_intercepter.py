@@ -59,19 +59,19 @@ def compute_euclid_interception(pos: Position, vel: float, route: Route, lock_on
 class EuclidianInterceptionRoute(InterceptionRoute):
     """Models a route of an euclidian intercepter, that is an intercepter moving in a straight line to intercept the targets."""
                  
-    def __init__(self, route_indicies: List[int], routes: List[Route], velocity: float, delay: float, initial_position: Position, terminal_position: Position):
+    def __init__(self, route_indices: List[int], routes: List[Route], velocity: float, delay: float, initial_position: Position, terminal_position: Position):
         """Initializes the euclidian interception route, and computes its path using the compute_euclid_interception function."""
-        self.route_indicies = route_indicies
+        self.route_indices = route_indices
         self.delay = delay 
         self.velocity = velocity
         self.initial_position = initial_position
         self.terminal_position = terminal_position
 
         # Compute first interception point
-        self.interception_points = [compute_euclid_interception(initial_position, velocity, routes[route_indicies[0]], self.terminal_position, lock_on_time=delay)]
+        self.interception_points = [compute_euclid_interception(initial_position, velocity, routes[route_indices[0]], self.terminal_position, lock_on_time=delay)]
         time = delay + np.linalg.norm(self.interception_points[-1] - self.initial_position) / velocity
 
-        for k in route_indicies[1:]:
+        for k in route_indices[1:]:
             # Compute the interception point of each k, moving from the latest interception point.
             self.interception_points.append(compute_euclid_interception(self.interception_points[-1], velocity, routes[k], self.terminal_position, lock_on_time=time))
             time += np.linalg.norm(self.interception_points[-1] - self.interception_points[-2]) / velocity

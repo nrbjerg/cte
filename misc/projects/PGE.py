@@ -132,18 +132,18 @@ class Graph:
                  bbox=dict(facecolor='black', edgecolor='none', boxstyle='circle'), zorder=2)
 
         # Plot the edges of the graph, marking the intersecting ones with red.
-        problem_edge_indicies = set()
+        problem_edge_indices = set()
         for e0, e1 in combinations(self.edges, 2):
             seg0 = (embedding[e0[0]], embedding[e0[1]])
             seg1 = (embedding[e1[0]], embedding[e1[1]])
             if _intersects(seg0, seg1):
-                problem_edge_indicies.add(self.edges.index(e0))
-                problem_edge_indicies.add(self.edges.index(e1))
+                problem_edge_indices.add(self.edges.index(e0))
+                problem_edge_indices.add(self.edges.index(e1))
         
         for idx, edge in enumerate(self.edges):
             xs = [embedding[edge[0]][0], embedding[edge[1]][0]]
             ys = [embedding[edge[0]][1], embedding[edge[1]][1]]
-            if idx not in problem_edge_indicies:
+            if idx not in problem_edge_indices:
                 plt.plot(xs, ys, c = "tab:green", zorder = 1)
             else:
                 plt.plot(xs, ys, c = "tab:red", zorder = 1)
@@ -203,12 +203,12 @@ def genetic_algortihm(g: Graph, time_budget: float = 60.0, n_pop: int = 128) -> 
         # Crossover & mutation.
         new_generation = []
         for i in range(n_pop):
-            parent_indicies = np.random.choice(n_pop, size = 2, replace = False, p = probs)
-            parents = [generation[i] for i in parent_indicies]
-            indicies = np.random.choice(2, size=g.n, p = (0.8, 0.2))
+            parent_indices = np.random.choice(n_pop, size = 2, replace = False, p = probs)
+            parents = [generation[i] for i in parent_indices]
+            indices = np.random.choice(2, size=g.n, p = (0.8, 0.2))
 
-            non_mutated_offspring = [np.array([parents[parent_index][i] for i, parent_index in enumerate(indicies)]), 
-                                     np.array([parents[parent_index][1 - i] for i, parent_index in enumerate(indicies)])]
+            non_mutated_offspring = [np.array([parents[parent_index][i] for i, parent_index in enumerate(indices)]), 
+                                     np.array([parents[parent_index][1 - i] for i, parent_index in enumerate(indices)])]
             
             # TODO: This mutation algorithm is shit, use truncated normal distributions instead.
             for child in non_mutated_offspring:
@@ -236,9 +236,9 @@ def genetic_algortihm(g: Graph, time_budget: float = 60.0, n_pop: int = 128) -> 
 
         # Compute fitnesses and select most fit individual in the new population
         fitnesses_of_new_generation = [g.crossing_number(embedding) for embedding in new_generation]
-        indicies = np.argsort(fitnesses_of_new_generation)[:n_pop - 1]
-        generation = [new_generation[i] for i in indicies]
-        fitnesses = np.array([fitnesses_of_new_generation[i] for i in indicies])
+        indices = np.argsort(fitnesses_of_new_generation)[:n_pop - 1]
+        generation = [new_generation[i] for i in indices]
+        fitnesses = np.array([fitnesses_of_new_generation[i] for i in indices])
         
         # Elitism
         generation.append(best_embedding)

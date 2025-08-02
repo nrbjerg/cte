@@ -56,7 +56,7 @@ def reversed_dijkstra(nodes: List[Node], target_id: int = -1) -> Dict[int, Route
                 current_id = node_id
             
         current_node = nodes[current_id] 
-        indicies = fastest_routes[current_id].indicies
+        indices = fastest_routes[current_id].indices
         nodes_in_route = fastest_routes[current_id].nodes
 
         for index, adjacent_node in enumerate(current_node.adjacent_nodes):
@@ -64,7 +64,7 @@ def reversed_dijkstra(nodes: List[Node], target_id: int = -1) -> Dict[int, Route
                 continue
 
             if adjacent_node.node_id not in fastest_routes.keys() or smallest_costs[current_id] + current_node.costs[index] < smallest_costs[adjacent_node.node_id]:
-                fastest_routes[adjacent_node.node_id] = Route(nodes_in_route + [adjacent_node], indicies + [index])
+                fastest_routes[adjacent_node.node_id] = Route(nodes_in_route + [adjacent_node], indices + [index])
                 smallest_costs[adjacent_node.node_id] = smallest_costs[current_id] + current_node.costs[index]
 
         unvisited.remove(current_id)

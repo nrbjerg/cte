@@ -48,8 +48,8 @@ class GA:
     mu: int # Population Number
     lmbda: int # Number of offspring
     number_of_nodes: int
-    node_indicies: Set[int]
-    node_indicies_array: Vector
+    node_indices: Set[int]
+    node_indices_array: Vector
 
     def __init__ (self, problem_instance: CEDOPADSInstance, utility_function: UtilityFunction, mu: int = 256, lmbda: int = 256 * 7, seed: Optional[int] = None):
         """Initializes the genetic algorithm including initializing the population."""
@@ -58,8 +58,8 @@ class GA:
         self.lmbda = lmbda
         self.mu = mu
         self.number_of_nodes = len(self.problem_instance.nodes)
-        self.node_indicies = set(range(self.number_of_nodes))
-        self.node_indicies_arrray = np.array(range(self.number_of_nodes))
+        self.node_indices = set(range(self.number_of_nodes))
+        self.node_indices_arrray = np.array(range(self.number_of_nodes))
         
         # Seed RNG for repeatability
         if seed is None:
@@ -80,7 +80,7 @@ class GA:
         # maybe we pick them with a probability which is propotional to the distance to the individual?
         blacklist = set(k for (k, _, _, _) in individual)
 
-        k = random.choice(list(self.node_indicies.difference(blacklist)))
+        k = random.choice(list(self.node_indices.difference(blacklist)))
         psi = random.choice(self.problem_instance.nodes[k].AOAs).generate_uniform_angle() # TODO:
         tau = (psi + np.pi + np.random.uniform( -self.problem_instance.eta / 2, self.problem_instance.eta / 2)) % (2 * np.pi)
         r = random.uniform(self.problem_instance.sensing_radii[0], self.problem_instance.sensing_radii[1])
@@ -127,7 +127,7 @@ class GA:
 
         weights = self.sdrs_for_overwrite[self.mask_for_overwrite]
         probs = weights / np.sum(weights)
-        k = np.random.choice(self.node_indicies_arrray[self.mask_for_overwrite], p = probs)
+        k = np.random.choice(self.node_indices_arrray[self.mask_for_overwrite], p = probs)
 
         # perform sampling and pick the best one from a set of m posible.
         visits_and_sdrs = []
@@ -167,32 +167,32 @@ class GA:
         if not m >= 2:
             return parents 
 
-        indicies = sorted(np.random.choice(m, 2, replace = False))
+        indices = sorted(np.random.choice(m, 2, replace = False))
 
         offspring = []
         for idx in range(2):
             paternal, maternal = parents[idx], parents[(idx + 1) % 2] 
-            child = paternal[:indicies[0]] + maternal[indicies[0]:indicies[1]] + paternal[indicies[1]:]
+            child = paternal[:indices[0]] + maternal[indices[0]:indices[1]] + paternal[indices[1]:]
 
             # Fix any mishaps when the child was created, i.e. make sure that the same node i never visited twice.
-            ks = {child[jdx][0] for jdx in range(indicies[0], indicies[1] + 1)} 
+            ks = {child[jdx][0] for jdx in range(indices[0], indices[1] + 1)} 
 
             # NOTE: Normaly the order of the visits is reversed, however since our distance "metric" is in this case non-symetric we will not use this convention.
-            visits_which_may_replace = [visit for visit in paternal[indicies[0]:indicies[1]] if visit[0] not in ks]
+            visits_which_may_replace = [visit for visit in paternal[indices[0]:indices[1]] if visit[0] not in ks]
             number_of_visits_replaced, number_of_visits_which_can_be_replaced = 0, len(visits_which_may_replace)
 
-            indicies_to_remove = []
-            for jdx in itertools.chain(range(indicies[0]), range(indicies[1], len(child))):
+            indices_to_remove = []
+            for jdx in itertools.chain(range(indices[0]), range(indices[1], len(child))):
                 # Replace the visit with one from the other parent is posible otherwise simply remove the visit entirely
                 if child[jdx][0] in ks:
                     if number_of_visits_replaced < number_of_visits_which_can_be_replaced:
                         child[jdx] = visits_which_may_replace[number_of_visits_replaced]
                         number_of_visits_replaced += 1
                     else:
-                        indicies_to_remove.append(jdx)
+                        indices_to_remove.append(jdx)
 
-            # actually remove the indices, we have to do it to not mess with the indicies.
-            for jdx in reversed(indicies_to_remove):
+            # actually remove the indices, we have to do it to not mess with the indices.
+            for jdx in reversed(indices_to_remove):
                 child.pop(jdx)
 
             offspring.append(child)
@@ -227,8 +227,8 @@ class GA:
 
         if np.random.uniform(0, 1) < p_s and len(individual) >= 2: 
             # Swap two random visists along the route described by the individual.
-            indicies = np.random.choice(len(individual), size = 2, replace = False)
-            individual[indicies[0]], individual[indicies[1]] = individual[indicies[1]], individual[indicies[0]]
+            indices = np.random.choice(len(individual), size = 2, replace = False)
+            individual[indices[0]], individual[indices[1]] = individual[indices[1]], individual[indices[0]]
 
         # Finally we perform multiple angle mutations
         return self.angle_mutation(individual, q)
@@ -301,8 +301,8 @@ class GA:
 
     # --------------------------------------- Sampling of parents --------------------------------------- #
     def stochastic_universal_sampling (self, cdf: ArrayLike, m: int) -> List[int]:
-        """Implements the SUS algortihm, used to sample the indicies of m parents from the population."""
-        indicies = [None for _ in range(m)] 
+        """Implements the SUS algortihm, used to sample the indices of m parents from the population."""
+        indices = [None for _ in range(m)] 
         i, j = 0, 0
         r = np.random.uniform(0, 1 / m)
 
@@ -311,25 +311,25 @@ class GA:
         # the offset for each of the indicators is 1 / m)
         while i < m:
             while r <= cdf[j]:
-                indicies[i] = j 
+                indices[i] = j 
                 r += 1 / m
                 i += 1
             
             j += 1
 
-        return indicies
+        return indices
 
     # ----------------------------------------- Survivor Selection -------------------------------------- #
     def mu_comma_lambda_selection(self, offspring: List[CEDOPADSRoute]) -> List[CEDOPADSRoute]:
         """Picks the mu offspring with the highest fitnesses to populate the the next generation, note this is done with elitism."""
         fitnesses_of_offspring = np.array(list(map(lambda child: self.fitness_function(child), offspring)))
 
-        # Calculate the indicies of the best performing memebers
-        indicies_of_new_generation = np.argsort(fitnesses_of_offspring)[-self.mu:]
+        # Calculate the indices of the best performing memebers
+        indices_of_new_generation = np.argsort(fitnesses_of_offspring)[-self.mu:]
 
         # Simply set the new fitnesses which have been calculated recently.
-        self.fitnesses = fitnesses_of_offspring[indicies_of_new_generation]
-        return [offspring[i] for i in indicies_of_new_generation]
+        self.fitnesses = fitnesses_of_offspring[indices_of_new_generation]
+        return [offspring[i] for i in indices_of_new_generation]
 
     # -------------------------------------------- Main Loop of GA --------------------------------------- #
     def run(self, time_budget: float, display_progress_bar: bool = False) -> CEDOPADSRoute:
@@ -383,8 +383,8 @@ class GA:
                 
                 offspring = []
                 while len(offspring) < self.lmbda:
-                    parent_indicies = self.stochastic_universal_sampling(cdf, m = 2)
-                    parents = [self.population[i] for i in parent_indicies]
+                    parent_indices = self.stochastic_universal_sampling(cdf, m = 2)
+                    parents = [self.population[i] for i in parent_indices]
                     for child in self.partially_mapped_crossover(parents): 
                         mutated_child = self.mutate(deepcopy(child), p_s = 0.2, p_i = 0.3, p_r = 0.2, q = 0.1)
                         fixed_mutated_child, _ = self.fix_length(mutated_child) # NOTE: This also returns the length of the mutated_child, which could be usefull in later stages.
@@ -398,7 +398,7 @@ class GA:
                     # the original individual, sort of like a Lamarckian mematic algortihm, however
                     # here the local search is done using a stochastic operator.
                     #offspring.append(self.fix_length(self.wiggle_angles(deepcopy(self.population[i]), q = 0.05)))
-                    #index_of_individual_to_be_wiggled = parent_indicies[np.random.choice(len(parent_indicies))]
+                    #index_of_individual_to_be_wiggled = parent_indices[np.random.choice(len(parent_indices))]
                     #offspring.append(self.fix_length(self.wiggle_angles(deepcopy(self.population[index_of_individual_to_be_wiggled]), q = 0.2))[0])
 
                 # Survivor selection, responsible for find the lements which are passed onto the next generation.

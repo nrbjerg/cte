@@ -79,8 +79,8 @@ class OPInstance:
 
     def compute_score(self, route: List[Node]) -> float:
         """Computes the score of the given route"""
-        indicies = [0] + [node.node_id + 1 for node in route] + [len(self.nodes) + 1]
-        probability_of_survival = prod([(1 - self.risks[i, j]) for i, j in zip(indicies[:-1], indicies[1:])])
+        indices = [0] + [node.node_id + 1 for node in route] + [len(self.nodes) + 1]
+        probability_of_survival = prod([(1 - self.risks[i, j]) for i, j in zip(indices[:-1], indices[1:])])
         return probability_of_survival * sum(n.score for n in set(route))
 
     def compute_length(self, route: List[Node]) -> float:
@@ -204,8 +204,8 @@ def _remove_node(problem: OPInstance, route: Route) -> Tuple[Node | None, Route,
     idx_of_worst_candidate = None
 
     positions = [problem.source] + [node.pos for node in route] + [problem.sink]
-    indicies = [0] + [node.node_id for node in route] + [len(problem.nodes) + 1]
-    for idx, ((i, j, k), (p, node, q)) in enumerate(zip(zip(indicies[:-2], indicies[1:-1], indicies[2:]), zip(positions[:-2], route, positions[2:]))):
+    indices = [0] + [node.node_id for node in route] + [len(problem.nodes) + 1]
+    for idx, ((i, j, k), (p, node, q)) in enumerate(zip(zip(indices[:-2], indices[1:-1], indices[2:]), zip(positions[:-2], route, positions[2:]))):
         # Check if node1 should be skiped.
         change_in_distance = np.linalg.norm(p - q) - np.linalg.norm(p - node.pos) - np.linalg.norm(node.pos - q)
         change_in_score = -node.score

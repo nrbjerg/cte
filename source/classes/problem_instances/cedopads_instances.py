@@ -153,11 +153,11 @@ class CEDOPADSInstance:
 
     def reduce(self, n: int):
         """Reduces the problem by picking n random nodes to keep."""
-        indicies = np.random.choice(len(self.nodes), n, replace = False)
-        self.nodes = [self.nodes[i] for i in indicies]
+        indices = np.random.choice(len(self.nodes), n, replace = False)
+        self.nodes = [self.nodes[i] for i in indices]
 
     def plot(self, aoas_to_exclude: Dict[int, int], show: bool = False):
-        """Displays a plot of the problem instance, and displays the coresponding angles, but excludeds the angle intervals specified by the angle_intervals_to_exclude dictionary containing node indicies and angle interval indicies."""
+        """Displays a plot of the problem instance, and displays the coresponding angles, but excludeds the angle intervals specified by the angle_intervals_to_exclude dictionary containing node indices and angle interval indices."""
         plt.style.use("bmh")
 
         plt.scatter(*self.source, 120, marker = "s", c = "black", zorder=4)
@@ -277,7 +277,7 @@ class CEDOPADSInstance:
         return self.nodes[k].compute_score(psi, tau, r, self.eta, utility_function)
 
     def compute_scores_along_route(self, route: CEDOPADSRoute, utility_function: UtilityFunction) -> List[float]:
-        """Computes the scores along the route and returns them in a dictionary, with the indicies as keys."""
+        """Computes the scores along the route and returns them in a dictionary, with the indices as keys."""
         return [self.compute_score_of_visit(visit, utility_function) for visit in route]
 
     def is_route_feasible(self, route: CEDOPADSRoute) -> bool:

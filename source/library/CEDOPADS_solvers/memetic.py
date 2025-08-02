@@ -24,7 +24,7 @@ class Individual:
     """Stores the information relating to an individual"""
     route: CEDOPADSRoute
 
-    aoa_indicies: List[int]
+    aoa_indices: List[int]
     psi_mutation_step_sizes: List[float] 
     tau_mutation_step_sizes: List[float] 
     r_mutation_step_sizes: List[float] 
@@ -74,8 +74,8 @@ class GA:
     mu: int # Population Number
     lmbda: int # Number of offspring
     number_of_nodes: int
-    node_indicies: Set[int]
-    node_indicies_array: Vector
+    node_indices: Set[int]
+    node_indices_array: Vector
 
     def __init__ (self, problem_instance: CEDOPADSInstance, utility_function: UtilityFunction, mu: int = 256, lmbda: int = 256 * 7, seed: Optional[int] = None):
         """Initializes the genetic algorithm including initializing the population."""
@@ -84,8 +84,8 @@ class GA:
         self.lmbda = lmbda
         self.mu = mu
         self.number_of_nodes = len(self.problem_instance.nodes)
-        self.node_indicies = set(range(self.number_of_nodes))
-        self.node_indicies_arrray = np.array(range(self.number_of_nodes))
+        self.node_indices = set(range(self.number_of_nodes))
+        self.node_indices_arrray = np.array(range(self.number_of_nodes))
         
         self.r_default_mutation_step_size = (self.problem_instance.sensing_radii[1] - self.problem_instance.sensing_radii[0]) / 256
         self.tau_default_mutation_step_size = self.problem_instance.eta / 256 
@@ -110,13 +110,13 @@ class GA:
             route = [] 
             blacklist = set()
 
-            aoa_indicies = []
+            aoa_indices = []
             while self.problem_instance.is_route_feasible(route):
                 # Pick a new random visit and add it to the route.
-                k = random.choice(list(self.node_indicies.difference(blacklist)))
+                k = random.choice(list(self.node_indices.difference(blacklist)))
                 blacklist.add(k)
-                aoa_indicies.append(np.random.randint(len(self.problem_instance.nodes[k].AOAs)))
-                psi = self.problem_instance.nodes[k].AOAs[aoa_indicies[-1]].generate_uniform_angle() 
+                aoa_indices.append(np.random.randint(len(self.problem_instance.nodes[k].AOAs)))
+                psi = self.problem_instance.nodes[k].AOAs[aoa_indices[-1]].generate_uniform_angle() 
                 tau = (psi + np.pi + np.random.uniform( -self.problem_instance.eta / 2, self.problem_instance.eta / 2)) % (2 * np.pi)
                 r = random.uniform(self.problem_instance.sensing_radii[0], self.problem_instance.sensing_radii[1])
 
@@ -130,7 +130,7 @@ class GA:
             r_mutation_step_sizes = [self.r_default_mutation_step_size for (_, _, _, _) in route]
 
             population.append(Individual(route, scores = scores,
-                                         aoa_indicies = aoa_indicies,
+                                         aoa_indices = aoa_indices,
                                          psi_mutation_step_sizes = psi_mutation_step_sizes, 
                                          tau_mutation_step_sizes = tau_mutation_step_sizes,
                                          r_mutation_step_sizes = r_mutation_step_sizes,
@@ -150,6 +150,8 @@ class GA:
         if not m >= 2:
             return parents 
 
+        # TODO: Maybe look for a pair of consecutive visits to the same pair of nodes instead,
+        #       Then we can swap the routes between said nodes.
         (i, j) = tuple(sorted(np.random.choice(m, 2, replace = False)))
 
         offspring = []
@@ -159,7 +161,7 @@ class GA:
             psi_mutation_step_sizes = paternal.psi_mutation_step_sizes[:i] + maternal.psi_mutation_step_sizes[i:j] + paternal.psi_mutation_step_sizes[j:]
             tau_mutation_step_sizes = paternal.tau_mutation_step_sizes[:i] + maternal.tau_mutation_step_sizes[i:j] + paternal.tau_mutation_step_sizes[j:]
             r_mutation_step_sizes = paternal.r_mutation_step_sizes[:i] + maternal.r_mutation_step_sizes[i:j] + paternal.r_mutation_step_sizes[j:]
-            aoa_indicies = paternal.aoa_indicies[:i] + maternal.aoa_indicies[i:j] + paternal.aoa_indicies[j:]
+            aoa_indices = paternal.aoa_indices[:i] + maternal.aoa_indices[i:j] + paternal.aoa_indices[j:]
             states = paternal.states[:i] + maternal.states[i:j] + paternal.states[j:]
             scores = paternal.scores[:i] + maternal.scores[i:j] + paternal.scores[j:]
 
@@ -168,36 +170,36 @@ class GA:
             ks = {route[idx][0] for idx in range(i, j + 1)} 
 
             # NOTE: Normaly the order of the visits is reversed, however since our distance "metric" is in this case non-symetric we will not use this convention.
-            indicies_which_may_replace = [idx for idx in range(i, j) if paternal.route[idx][0] not in ks]
-            number_of_visits_replaced, number_of_visits_which_can_be_replaced = 0, len(indicies_which_may_replace)
+            indices_which_may_replace = [idx for idx in range(i, j) if paternal.route[idx][0] not in ks]
+            number_of_visits_replaced, number_of_visits_which_can_be_replaced = 0, len(indices_which_may_replace)
 
-            indicies_to_remove = []
+            indices_to_remove = []
             for idx in itertools.chain(range(i), range(j, len(route))):
                 # Replace the visit with one from the other parent if posible otherwise simply remove the visit entirely
                 if route[idx][0] in ks:
                     if number_of_visits_replaced < number_of_visits_which_can_be_replaced:
-                        route[idx] = paternal.route[indicies_which_may_replace[number_of_visits_replaced]]
-                        psi_mutation_step_sizes[idx] = paternal.psi_mutation_step_sizes[indicies_which_may_replace[number_of_visits_replaced]]
-                        tau_mutation_step_sizes[idx] = paternal.tau_mutation_step_sizes[indicies_which_may_replace[number_of_visits_replaced]]
-                        r_mutation_step_sizes[idx] = paternal.r_mutation_step_sizes[indicies_which_may_replace[number_of_visits_replaced]]
-                        aoa_indicies[idx] = paternal.aoa_indicies[indicies_which_may_replace[number_of_visits_replaced]]
-                        states[idx] = paternal.states[indicies_which_may_replace[number_of_visits_replaced]]
-                        scores[idx] = paternal.scores[indicies_which_may_replace[number_of_visits_replaced]]
+                        route[idx] = paternal.route[indices_which_may_replace[number_of_visits_replaced]]
+                        psi_mutation_step_sizes[idx] = paternal.psi_mutation_step_sizes[indices_which_may_replace[number_of_visits_replaced]]
+                        tau_mutation_step_sizes[idx] = paternal.tau_mutation_step_sizes[indices_which_may_replace[number_of_visits_replaced]]
+                        r_mutation_step_sizes[idx] = paternal.r_mutation_step_sizes[indices_which_may_replace[number_of_visits_replaced]]
+                        aoa_indices[idx] = paternal.aoa_indices[indices_which_may_replace[number_of_visits_replaced]]
+                        states[idx] = paternal.states[indices_which_may_replace[number_of_visits_replaced]]
+                        scores[idx] = paternal.scores[indices_which_may_replace[number_of_visits_replaced]]
                         number_of_visits_replaced += 1
                     else:
-                        indicies_to_remove.append(idx)
+                        indices_to_remove.append(idx)
 
-            # actually remove the indices, we have to do it to not mess with the indicies.
-            for idx in reversed(indicies_to_remove):
+            # actually remove the indices, we have to do it to not mess with the indices.
+            for idx in reversed(indices_to_remove):
                 route.pop(idx)
                 psi_mutation_step_sizes.pop(idx)
                 tau_mutation_step_sizes.pop(idx)
                 r_mutation_step_sizes.pop(idx)
                 states.pop(idx)
                 scores.pop(idx)
-                aoa_indicies.pop(idx)
+                aoa_indices.pop(idx)
 
-            offspring.append(Individual(route, aoa_indicies, psi_mutation_step_sizes, tau_mutation_step_sizes, r_mutation_step_sizes, scores = scores, states = states)) 
+            offspring.append(Individual(route, aoa_indices, psi_mutation_step_sizes, tau_mutation_step_sizes, r_mutation_step_sizes, scores = scores, states = states)) 
 
         return offspring
 
@@ -206,8 +208,8 @@ class GA:
         """Copies and mutates the copy of the individual, based on the time remaining biasing the removal of visits if the route is to long, and otherwise adding / replacing visits within the route.""" 
         # Replace visits within route
         n = max(0, min(np.random.geometric(1 - p) - 1, len(individual) - 1))
-        indicies = sorted(np.random.choice(len(individual), n, replace = False))
-        for i in indicies:
+        indices = sorted(np.random.choice(len(individual), n, replace = False))
+        for i in indices:
             # Replace visits through route.
             route_without_visit_i = individual.route[:i] + individual.route[i + 1:]
             best_visit, score = self.pick_visit_to_insert_based_on_SDR(route_without_visit_i, i)
@@ -221,17 +223,17 @@ class GA:
             individual.tau_mutation_step_sizes[i] = self.tau_default_mutation_step_size 
             individual.r_mutation_step_sizes[i] = self.r_default_mutation_step_size
 
-            individual.aoa_indicies[i] = self.problem_instance.nodes[best_visit[0]].AOAs.index(aoa)
+            individual.aoa_indices[i] = self.problem_instance.nodes[best_visit[0]].AOAs.index(aoa)
 
             individual.states[i] = self.problem_instance.get_state(best_visit)
             individual.scores[i] = score
 
-        indicies_to_skip = indicies
+        indices_to_skip = indices
 
         # Insert visists within the route the route.
         n = max(0, min(np.random.geometric(1 - q) - 1, len(individual)))
-        indicies = sorted(np.random.choice(len(individual) + 1, n, replace = False))
-        for j, i in enumerate(reversed(indicies), 1):
+        indices = sorted(np.random.choice(len(individual) + 1, n, replace = False))
+        for j, i in enumerate(reversed(indices), 1):
             best_visit, score = self.pick_visit_to_insert_based_on_SDR(individual.route, i)
 
             # Actually insert the information into the individual
@@ -245,12 +247,12 @@ class GA:
             individual.tau_mutation_step_sizes.insert(i, self.tau_default_mutation_step_size)
             individual.r_mutation_step_sizes.insert(i, self.r_default_mutation_step_size)
             
-            individual.aoa_indicies.insert(i, self.problem_instance.nodes[best_visit[0]].AOAs.index(aoa))
-            indicies_to_skip.append(i + n - j)
+            individual.aoa_indices.insert(i, self.problem_instance.nodes[best_visit[0]].AOAs.index(aoa))
+            indices_to_skip.append(i + n - j)
 
         # Finally we perform multiple angle mutations
-        #return self.non_self_adaptive_scalar_mutation(individual), indicies_to_skip
-        return self.self_adaptive_scalar_mutation(individual), indicies_to_skip
+        #return self.non_self_adaptive_scalar_mutation(individual), indices_to_skip
+        return self.self_adaptive_scalar_mutation(individual), indices_to_skip
 
     def pick_best_explored_visit_based_on_sdr(self, route: CEDOPADSRoute, i: int, k: int) -> Tuple[Visit, float, float]:
         """Picks the best visit to node k based on the SDR, by inserting it within path segment i."""
@@ -330,7 +332,7 @@ class GA:
         probs = weights / np.sum(weights)
 
         # TODO: use the actual path where the visit is inserted to determine the appropriate k
-        ks = np.random.choice(self.node_indicies_arrray[self.mask_for_overwrite], size = m, p = probs)
+        ks = np.random.choice(self.node_indices_arrray[self.mask_for_overwrite], size = m, p = probs)
 
         # Find the actual best visit for visiting node k according to the SDR score.
         best_visits_and_information = [self.pick_best_explored_visit_based_on_sdr(route, i, k) for k in ks]
@@ -344,35 +346,35 @@ class GA:
         baseline_scale_for_step_sizes = 1 / np.sqrt(2 * len(individual))
 
         n = max(0, min(np.random.geometric(1 - 0.2) - 1, len(individual)))
-        indicies = np.random.choice(len(individual), n, replace = False)
+        indices = np.random.choice(len(individual), n, replace = False)
         
         mutation_steps_for_mutation_step_sizes = np.random.normal(0, 1, size=(n, 3))
         mutation_steps_for_mutation_step_sizes[:, 0] *= c_psi * baseline_scale_for_step_sizes
         mutation_steps_for_mutation_step_sizes[:, 1] *= c_tau * baseline_scale_for_step_sizes
         mutation_steps_for_mutation_step_sizes[:, 2] *= c_r * baseline_scale_for_step_sizes
 
-        for i, j in enumerate(indicies):
+        for i, j in enumerate(indices):
             individual.psi_mutation_step_sizes[j] = np.maximum(individual.psi_mutation_step_sizes[j] * np.exp(mutation_steps_for_mutation_step_sizes[i, 0]), eps)
             individual.tau_mutation_step_sizes[j] = np.maximum(individual.tau_mutation_step_sizes[j] * np.exp(mutation_steps_for_mutation_step_sizes[i, 1]), eps)
             individual.r_mutation_step_sizes[j] = np.maximum(individual.r_mutation_step_sizes[j] * np.exp(mutation_steps_for_mutation_step_sizes[i, 2]), eps)
 
         # TODO: Mutation steps
-        N_psi = np.random.normal(0, [individual.psi_mutation_step_sizes[j] for j in indicies])
-        N_tau = np.random.normal(0, [individual.tau_mutation_step_sizes[j] for j in indicies])
-        N_r = np.random.normal(0, [individual.r_mutation_step_sizes[j] for j in indicies])
+        N_psi = np.random.normal(0, [individual.psi_mutation_step_sizes[j] for j in indices])
+        N_tau = np.random.normal(0, [individual.tau_mutation_step_sizes[j] for j in indices])
+        N_r = np.random.normal(0, [individual.r_mutation_step_sizes[j] for j in indices])
 
         # Update each visit accordingly.
-        for i, j in enumerate(indicies):
+        for i, j in enumerate(indices):
             
             # Update psi, by skipping to the next aoa clockwise / counter clockwise if we get out of bounds.
             (k, psi, tau, r) = individual.route[j]
             new_psi = psi + N_psi[i]
-            aoa = self.problem_instance.nodes[k].AOAs[individual.aoa_indicies[j]]
+            aoa = self.problem_instance.nodes[k].AOAs[individual.aoa_indices[j]]
             if not aoa.contains_angle(new_psi):
                 # Move counterclockwise if N_psi > 0 and clockwise otherwise.
                 change_in_aoa_idx = 1 if N_psi[i] > 0 else -1 
-                individual.aoa_indicies[j] = (individual.aoa_indicies[j] + change_in_aoa_idx) % len(self.problem_instance.nodes[k].AOAs) 
-                new_aoa = self.problem_instance.nodes[k].AOAs[individual.aoa_indicies[j]]
+                individual.aoa_indices[j] = (individual.aoa_indices[j] + change_in_aoa_idx) % len(self.problem_instance.nodes[k].AOAs) 
+                new_aoa = self.problem_instance.nodes[k].AOAs[individual.aoa_indices[j]]
 
                 # Pick the angle closest to the original angle, from the new aoa
                 new_psi = new_aoa.a if change_in_aoa_idx == 1 else new_aoa.b
@@ -399,9 +401,9 @@ class GA:
         return individual
 
     # --------------------------------------------------------- Feasability ------------------------------------------------------------------- #
-    def fix_length_optimized(self, individual: Individual, indicies_to_skip: List[int]) -> Individual:
+    def fix_length_optimized(self, individual: Individual, indices_to_skip: List[int]) -> Individual:
         """Removes visits from the individual until it obeys the distance constraint."""
-        indicies_to_skip_mask = [np.inf if idx in indicies_to_skip else 0 for idx in range(len(individual))]
+        indices_to_skip_mask = [np.inf if idx in indices_to_skip else 0 for idx in range(len(individual))]
 
         # Keep track of these rather than recomputing them on the fly
         individual.segment_lengths = self.problem_instance.compute_lengths_of_route_segments_from_states(individual.states)
@@ -436,16 +438,16 @@ class GA:
                     distances_saved.pop(idx_skipped)
                     sdsr_scores.pop(idx_skipped)
 
-                    # Find the "updated" (i.e. after popping) indicies which needs updating 
+                    # Find the "updated" (i.e. after popping) indices which needs updating 
                     m = len(individual)
                     if idx_skipped == 0:
-                        indicies_which_needs_updating = [0] 
+                        indices_which_needs_updating = [0] 
                     elif idx_skipped == m:
-                        indicies_which_needs_updating = [m - 1] 
+                        indices_which_needs_updating = [m - 1] 
                     else:
-                        indicies_which_needs_updating = [idx_skipped - 1, idx_skipped]
+                        indices_which_needs_updating = [idx_skipped - 1, idx_skipped]
 
-                    for idx in indicies_which_needs_updating:
+                    for idx in indices_which_needs_updating:
                         # Recompute the lenghts of the new segments.
                         if idx == 0:
                             lengths_of_new_segments[0] = compute_length_of_relaxed_dubins_path(individual.states[1].angle_complement(), self.problem_instance.source, self.problem_instance.rho)
@@ -461,21 +463,21 @@ class GA:
                         sdsr_scores[idx] = np.inf if distances_saved[idx] == 0 else individual.scores[idx] / distances_saved[idx]
 
                 # This is according to the ratio: score of visit / length saved by excluding visit that is the "score distance saved ratio (SDSR)"
-                idx_skipped = np.argmin([sdsr_score + mask_score for sdsr_score, mask_score in zip(sdsr_scores, indicies_to_skip_mask)])
+                idx_skipped = np.argmin([sdsr_score + mask_score for sdsr_score, mask_score in zip(sdsr_scores, indices_to_skip_mask)])
 
                 # NOTE: we need to change both the segment length at the idx_skipped and idx_skipped + 1, since we are skipping the 
                 #       visit at idx_skipped and this visit is partially responsible for these path segements
                 individual.segment_lengths[idx_skipped + 1] = lengths_of_new_segments[idx_skipped]
                 individual.segment_lengths.pop(idx_skipped)
 
-                indicies_to_skip_mask.pop(idx_skipped)
+                indices_to_skip_mask.pop(idx_skipped)
                 individual.route.pop(idx_skipped)
                 individual.states.pop(idx_skipped)
                 individual.scores.pop(idx_skipped)
                 individual.psi_mutation_step_sizes.pop(idx_skipped)
                 individual.tau_mutation_step_sizes.pop(idx_skipped)
                 individual.r_mutation_step_sizes.pop(idx_skipped)
-                individual.aoa_indicies.pop(idx_skipped)
+                individual.aoa_indices.pop(idx_skipped)
 
                 distance -= distances_saved[idx_skipped]
 
@@ -519,11 +521,11 @@ class GA:
             N_psi = np.random.normal(0, scale = individual.psi_mutation_step_sizes[idx])
             N_tau = np.random.normal(0, scale = individual.tau_mutation_step_sizes[idx])
             new_psi = psi + N_psi
-            aoa = self.problem_instance.nodes[k].AOAs[individual.aoa_indicies[idx]]
+            aoa = self.problem_instance.nodes[k].AOAs[individual.aoa_indices[idx]]
             if not aoa.contains_angle(new_psi):
                 # Move counterclockwise if N_psi > 0 and clockwise otherwise.
                 change_in_aoa_idx = 1 if N_psi > 0 else -1 
-                new_aoa_index = (individual.aoa_indicies[idx] + change_in_aoa_idx) % len(self.problem_instance.nodes[k].AOAs) 
+                new_aoa_index = (individual.aoa_indices[idx] + change_in_aoa_idx) % len(self.problem_instance.nodes[k].AOAs) 
                 new_aoa = self.problem_instance.nodes[k].AOAs[new_aoa_index]
 
                 # Pick the angle closest to the original angle, from the new aoa
@@ -576,7 +578,7 @@ class GA:
                 individual.segment_lengths[idx] = new_lengths[0]
                 individual.segment_lengths[idx + 1] = new_lengths[1]
                 if new_aoa_index is not None:
-                    individual.aoa_indicies[idx] = new_aoa_index
+                    individual.aoa_indices[idx] = new_aoa_index
                 
                 break
 
@@ -609,6 +611,8 @@ class GA:
             
         blacklist = set(visit[0] for visit in individual.route)
         possible_candidates = list(set(range(self.number_of_nodes)).difference(blacklist))
+
+        # TODO: These possible candidates needs to be reduced in some way! instead of computing these minimum distances, which is waaaaay to expensive.
         distances = [compute_minimum_distance_to_point_from_dubins_path_segment(self.problem_instance.nodes[k].pos, q_i, sub_segment_types, sub_segment_lengths, self.problem_instance.rho) for k in possible_candidates]
         candidates = [k for k, dist in zip(possible_candidates, distances) if dist < self.problem_instance.sensing_radii[1]]
 
@@ -630,16 +634,16 @@ class GA:
         node_id_at_indices = {}
         scores_of_strongest_candidate_visits = {}
         for k, candidate_visits in candidate_visits.items():
-            candidate_visits_which_are_not_at_already_used_indicies = [visit for visit in candidate_visits if visit[0] not in node_id_at_indices.keys()]
-            if len(candidate_visits_which_are_not_at_already_used_indicies) == 0:
+            candidate_visits_which_are_not_at_already_used_indices = [visit for visit in candidate_visits if visit[0] not in node_id_at_indices.keys()]
+            if len(candidate_visits_which_are_not_at_already_used_indices) == 0:
                 continue # Simply skip this candidate.
             
             # Find the best scoring visit
-            scores = [self.problem_instance.compute_score_of_visit((k, *candidate_visit[1:]), self.utility_function) for candidate_visit in candidate_visits_which_are_not_at_already_used_indicies]
+            scores = [self.problem_instance.compute_score_of_visit((k, *candidate_visit[1:]), self.utility_function) for candidate_visit in candidate_visits_which_are_not_at_already_used_indices]
             jdx_of_best_scored_candidate = np.argmax(scores)
 
             scores_of_strongest_candidate_visits[k] = scores[jdx_of_best_scored_candidate]
-            best_candidate_visit = candidate_visits_which_are_not_at_already_used_indicies[jdx_of_best_scored_candidate]
+            best_candidate_visit = candidate_visits_which_are_not_at_already_used_indices[jdx_of_best_scored_candidate]
             strongest_candidate_visits[k] = (k, *best_candidate_visit[1:])
             node_id_at_indices[best_candidate_visit[0]] = k 
 
@@ -662,7 +666,7 @@ class GA:
             psi_mutation_step_sizes.append(aoa.phi / 256)
             aoa_indices.append(self.problem_instance.nodes[k].AOAs.index(aoa))
 
-        individual.aoa_indicies = individual.aoa_indicies[:seg_idx] + aoa_indices + individual.aoa_indicies[seg_idx:]
+        individual.aoa_indices = individual.aoa_indices[:seg_idx] + aoa_indices + individual.aoa_indices[seg_idx:]
         individual.psi_mutation_step_sizes = individual.psi_mutation_step_sizes[:seg_idx] + psi_mutation_step_sizes + individual.psi_mutation_step_sizes[seg_idx:]
 
         # TODO: Compute path segment lengths for the new path segments. 
@@ -683,8 +687,8 @@ class GA:
 
     # --------------------------------------- Sampling of parents --------------------------------------- #
     def stochastic_universal_sampling (self, cdf: ArrayLike, m: int) -> List[int]:
-        """Implements the SUS algortihm, used to sample the indicies of m parents from the population."""
-        indicies = [None for _ in range(m)] 
+        """Implements the SUS algortihm, used to sample the indices of m parents from the population."""
+        indices = [None for _ in range(m)] 
         i, j = 0, 0
         r = np.random.uniform(0, 1 / m)
 
@@ -693,42 +697,42 @@ class GA:
         # the offset for each of the indicators is 1 / m)
         while i < m:
             while r <= cdf[j]:
-                indicies[i] = j 
+                indices[i] = j 
                 r += 1 / m
                 i += 1
             
             j += 1
 
-        return indicies
+        return indices
 
     # ----------------------------------------- Survivor Selection -------------------------------------- #
     def mu_comma_lambda_selection(self, offspring: List[Individual]) -> List[Individual]:
         """Picks the mu offspring with the highest fitnesses to populate the the next generation, note this is done with elitism."""
         fitnesses_of_offspring = np.array(list(map(lambda child: self.fitness_function(child), offspring)))
 
-        # Calculate the indicies of the best performing memebers
-        indicies_of_new_generation = np.argsort(fitnesses_of_offspring)[-self.mu:]
+        # Calculate the indices of the best performing memebers
+        indices_of_new_generation = np.argsort(fitnesses_of_offspring)[-self.mu:]
 
         # Simply set the new fitnesses which have been calculated recently.
-        self.fitnesses = fitnesses_of_offspring[indicies_of_new_generation]
-        return [offspring[i] for i in indicies_of_new_generation]
+        self.fitnesses = fitnesses_of_offspring[indices_of_new_generation]
+        return [offspring[i] for i in indices_of_new_generation]
 
     def mu_plus_lambda_selection(self, offspring: List[Individual]) -> List[Individual]:
         """Merges the newly generated offspring with the generation and selects the best mu individuals to survive until the next generation."""
         # NOTE: Recall that the fitness is time dependent hence we need to recalculate it for the parents.
         fitnesses_of_parents_and_offspring = np.array(list(map(lambda child: self.fitness_function(child), self.population + offspring)))
 
-        # Calculate the indicies of the best performing memebers
-        indicies_of_new_generation = np.argsort(fitnesses_of_parents_and_offspring)[-self.mu:]
+        # Calculate the indices of the best performing memebers
+        indices_of_new_generation = np.argsort(fitnesses_of_parents_and_offspring)[-self.mu:]
         
         # Simply set the new fitnesses which have been calculated recently.
-        self.fitnesses = fitnesses_of_parents_and_offspring[indicies_of_new_generation]
+        self.fitnesses = fitnesses_of_parents_and_offspring[indices_of_new_generation]
 
-        return [self.population[i] if i < self.mu else offspring[i - self.mu] for i in indicies_of_new_generation]
+        return [self.population[i] if i < self.mu else offspring[i - self.mu] for i in indices_of_new_generation]
 
     # -------------------------------------------- Main Loop of GA --------------------------------------- #
     def run(self, time_budget: float, display_progress_bar: bool = False, trace: bool = False) -> CEDOPADSRoute:
-        """Runs the genetic algorithm for a prespecified time, given by the time_budget, using k-point crossover with m parrents."""
+        """Runs the genetic algorithm for a prespecified time, given by the time_budget, using k-point crossover with m parents."""
         if trace:
             info_mean_fitness = []
             info_min_fitness = []
@@ -799,11 +803,11 @@ class GA:
                 # the angles in order to find new versions of the parents with higher fitness values.
                 offspring = []
                 while len(offspring) < self.lmbda: 
-                    parent_indicies = self.stochastic_universal_sampling(cdf, m = 2)
-                    parents = [self.population[i] for i in parent_indicies]
+                    parent_indices = self.stochastic_universal_sampling(cdf, m = 2)
+                    parents = [self.population[i] for i in parent_indices]
                     for child in self.partially_mapped_crossover(parents):
-                        mutated_child, indicies_to_skip = self.mutate(child, p = 0.1, q = 0.3) 
-                        fixed_mutated_child = self.fix_length_optimized(mutated_child, indicies_to_skip) 
+                        mutated_child, indices_to_skip = self.mutate(child, p = 0.1, q = 0.3) 
+                        fixed_mutated_child = self.fix_length_optimized(mutated_child, indices_to_skip) 
                         offspring.append(fixed_mutated_child)
                 
                 # Survivor selection, responsible for find the elements which are passed onto the next generation.
@@ -812,11 +816,13 @@ class GA:
 
                 # Memetic operators (Add free visits & optimize visits)
                 for idx, individual in enumerate(self.population):
-                    individual, indicies_of_free_visits_added = self.add_free_visits(individual)
-                    if (m := len(indicies_of_free_visits_added)) != 0:
+                    # TODO Increase the number of segments to look at throughout the search.
+                    individual, indices_of_free_visits_added = self.add_free_visits(individual)
+
+                    if (m := len(indices_of_free_visits_added)) != 0:
                         # TODO: Remove once we compute the lengths of the new path segments within the add_free_visits method.
                         individual.segment_lengths = self.problem_instance.compute_lengths_of_route_segments_from_states(individual.states)
-                        for jdx_of_free_visit_added in indicies_of_free_visits_added:
+                        for jdx_of_free_visit_added in indices_of_free_visits_added:
                             # Compute the segment lengths of the new visits.
                             score = self.problem_instance.compute_score_of_visit(individual.route[jdx_of_free_visit_added], self.utility_function)
                             sdr_score =  score / (individual.segment_lengths[jdx_of_free_visit_added] + individual.segment_lengths[jdx_of_free_visit_added + 1])
@@ -885,10 +891,10 @@ if __name__ == "__main__":
     problem_instance: CEDOPADSInstance = CEDOPADSInstance.load_from_file("p4.4.g.c.a.txt", needs_plotting = True)
     mu = 256
     ga = GA(problem_instance, utility_function, mu = mu, lmbda = mu * 7)
-    import cProfile
-    cProfile.run("ga.run(300, display_progress_bar = True)", sort = "cumtime")
-    #route = ga.run(300, display_progress_bar=True, trace=True)
-    #augmented_route = add_free_visits(problem_instance, route, utility_function)
-    #print(f"Score of augmented route: {problem_instance.compute_score_of_route(augmented_route, utility_function)} from {problem_instance.compute_score_of_route(route, utility_function)}")
-    #problem_instance.plot_with_route(route, utility_function)
-    #plt.show()
+    #import cProfile
+    #cProfile.run("ga.run(300, display_progress_bar = True)", sort = "cumtime")
+    route = ga.run(300, display_progress_bar=True, trace=True)
+    augmented_route = add_free_visits(problem_instance, route, utility_function)
+    print(f"Score of augmented route: {problem_instance.compute_score_of_route(augmented_route, utility_function)} from {problem_instance.compute_score_of_route(route, utility_function)}")
+    problem_instance.plot_with_route(route, utility_function)
+    plt.show()

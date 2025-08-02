@@ -40,7 +40,7 @@ def get_equidistant_samples(problem: CEDOPADSInstance, k: int) -> Iterator[Tuple
 
 # TODO: For now this only works on the non-relaxed dubins paths, an upgrade could be made to get it to work with the relaxed dubins path segments aswell.
 def add_free_visits(problem: CEDOPADSInstance, route: CEDOPADSRoute, utility_function: UtilityFunction, start_idx: Optional[int] = None, end_idx: Optional[int] = None) -> CEDOPADSRoute:
-    """Checks if any visits can be added for free into the route, at between the given indicies, if none are given simply add as many visists as posible."""
+    """Checks if any visits can be added for free into the route, at between the given indices, if none are given simply add as many visits as possible."""
     if (start_idx != None) and (end_idx != None):
         assert start_idx < end_idx
     
@@ -65,11 +65,7 @@ def add_free_visits(problem: CEDOPADSInstance, route: CEDOPADSRoute, utility_fun
             continue
 
         #dubins.path_sample(q0.to_tuple(), q1.to_tuple(), problem.rho, (problem.sensing_radii[1] - problem.sensing_radii[0])[0]:
-        for configuration in sample_dubins_path(q0, q1, problem.rho, (problem.sensing_radii[1] - problem.sensing_radii[0])): 
-            # TODO: the line above needs to be changed to fit with the new API
-            
-            
-            #plt.scatter(*configuration.pos, color = "tab:red")
+        for configuration in sample_dubins_path(q0, seg_types, seg_lengths, problem.rho, (problem.sensing_radii[1] - problem.sensing_radii[0])): 
             # Check if each candidate is within the FOV from the configuration and if the configuration lies within one of the AOAs
             for k in close_enough_node_ids:
                 delta = problem.nodes[k].pos - configuration.pos 
@@ -129,12 +125,12 @@ def _add_visit(route: CEDOPADSRoute, problem_instance: CEDOPADSInstance, utility
     index_of_visit_after_insertion, best_visit = None, None
     best_sdr, best_change_in_distance, best_change_in_score = 0, None, None
 
-    node_indicies = {k for k in range(len(problem_instance.nodes))}.difference([k for k, _, _, _ in route])
+    node_indices = {k for k in range(len(problem_instance.nodes))}.difference([k for k, _, _, _ in route])
 
     # 1. Check if the visit should be inserted before the route
     q = problem_instance.get_state(route[0])
     original_distance = compute_length_of_relaxed_dubins_path(q.angle_complement(), problem_instance.source, problem_instance.rho)
-    for k in node_indicies:
+    for k in node_indices:
         for i in range(len(problem_instance.nodes[k].thetas)):
             for (psi, tau) in get_samples(problem_instance, k, i):
                 visit = (k, psi, tau, problem_instance.sensing_radii[1])
@@ -163,7 +159,7 @@ def _add_visit(route: CEDOPADSRoute, problem_instance: CEDOPADSInstance, utility
         original_distance = dubins.shortest_path(q_i.to_tuple(), q_f.to_tuple(), problem_instance.rho).path_length()
 
         # Find the best candidate visit to add between route[idx:] and route[idx:]
-        for k in node_indicies:
+        for k in node_indices:
             for i in range(len(problem_instance.nodes[k].thetas)):
                 for (psi, tau) in get_samples(problem_instance, k, i):
                     visit = (k, psi, tau, problem_instance.sensing_radii[1])
@@ -188,7 +184,7 @@ def _add_visit(route: CEDOPADSRoute, problem_instance: CEDOPADSInstance, utility
     # 3. Check if the visit should be inserted at the end of the route
     q = problem_instance.get_state(route[-1])
     original_distance = compute_length_of_relaxed_dubins_path(q, problem_instance.sink, problem_instance.rho)
-    for k in node_indicies:
+    for k in node_indices:
         for i in range(len(problem_instance.nodes[k].thetas)):
             for (psi, tau) in get_samples(problem_instance, k, i):
                 # TODO:

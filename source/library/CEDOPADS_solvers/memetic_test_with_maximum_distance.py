@@ -457,7 +457,7 @@ class MemeticAlgorithm:
 		return scaled_fitnesses / np.sum(scaled_fitnesses)
 
 	def stochastic_universal_sampling(self, cdf: Vector, m: int) -> List[int]:
-		"""Implements the SUS algorithm, used to sample indicies of m parents within the population from the cumulative distribution function (cdf)."""
+		"""Implements the SUS algorithm, used to sample indices of m parents within the population from the cumulative distribution function (cdf)."""
 		indices = [None for _ in range(m)]
 		i, j = 0, 0
 		r = np.random.uniform(0, 1 / m)
@@ -544,8 +544,8 @@ class MemeticAlgorithm:
 					parent_indices = self.stochastic_universal_sampling(cdf, m = 2)
 					parents = [self.population[i] for i in parent_indices]
 					for child in self.modified_partially_mapped_crossover(parents):
-						mutated_child, indicies_to_skip = self.mutate(child, p = 0.4, q = 0.3, relative_sigma = 0.9) 
-						fixed_mutated_child = self.fix_length(mutated_child, indicies_to_skip)
+						mutated_child, indices_to_skip = self.mutate(child, p = 0.4, q = 0.3, relative_sigma = 0.9) 
+						fixed_mutated_child = self.fix_length(mutated_child, indices_to_skip)
 						offspring.append(fixed_mutated_child)
 
 				# Survivor selection, responsible for find the lements which are passed onto the next generation.
