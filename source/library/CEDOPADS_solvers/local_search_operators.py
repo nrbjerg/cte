@@ -6,37 +6,10 @@ from typing import Optional, Set, List, Dict, Tuple, Iterator
 from classes.data_types import State, Position, Dir, compute_difference_between_angles, Angle
 from library.core.dubins.dubins_api import call_dubins, sample_dubins_path, compute_minimum_distance_to_point_from_dubins_path_segment
 from library.core.dubins.relaxed_dubins import compute_length_of_relaxed_dubins_path
+from library.CEDOPADS_solvers.samplers import equidistant_sampling
 
 import dubins 
 import numpy as np 
-
-def get_samples(problem: CEDOPADSInstance, k: int) -> Iterator[Tuple[Angle, Angle, float]]:
-    """Generate the samples for the i'th angle interval of the k'th target."""
-    r = sum(problem.sensing_radii) / 2
-
-    for theta, phi in zip(problem.nodes[k].thetas, problem.nodes[k].phis):
-        if phi <= np.pi / 2:
-            psis = [theta, (theta + phi / 3) % (2 * np.pi), (theta - phi / 3) % (2 * np.pi)]
-        else: #phi <= 2 * np.pi / 3:
-            psis = [theta, (theta + phi / 4) % (2 * np.pi), (theta - phi / 4) % (2 * np.pi),
-                           (theta + phi / 2) % (2 * np.pi), (theta - phi / 2) % (2 * np.pi)]
-    
-        for psi in psis:
-            yield (psi, (psi + np.pi) % (2 * np.pi))
-            yield (psi, (psi + np.pi + problem.eta / 4) % (2 * np.pi))
-            yield (psi, (psi + np.pi - problem.eta / 4) % (2 * np.pi))
-            #yield (psi, (psi + np.pi + problem.eta / 3) % (2 * np.pi))
-            #yield (psi, (psi + np.pi - problem.eta / 3) % (2 * np.pi))
-
-def get_equidistant_samples(problem: CEDOPADSInstance, k: int) -> Iterator[Tuple[Angle, Angle, float]]:
-    """Gets equidistant samples (cordinate wise) from within AOA i of node k"""
-    r = sum(problem.sensing_radii) / 2
-    for i in range(len(problem.nodes[k].AOAs)):
-        #yield (k, problem.nodes[k].thetas[i], (problem.nodes[k].thetas[i] + np.pi) % (2 * np.pi), r)
-        psis = [(problem.nodes[k].thetas[i] - problem.nodes[k].phis[i] / 4.5) % (2 * np.pi), (problem.nodes[k].thetas[i] + problem.nodes[k].phis[i] / 4.5) % (2 * np.pi)]
-        for psi in psis:
-            yield (k, psi, (psi + np.pi - problem.eta / 4.5) % (2 * np.pi), r)
-            yield (k, psi, (psi + np.pi + problem.eta / 4.5) % (2 * np.pi), r)
 
 # TODO: For now this only works on the non-relaxed dubins paths, an upgrade could be made to get it to work with the relaxed dubins path segments aswell.
 def add_free_visits(problem: CEDOPADSInstance, route: CEDOPADSRoute, utility_function: UtilityFunction, start_idx: Optional[int] = None, end_idx: Optional[int] = None) -> CEDOPADSRoute:
@@ -132,7 +105,7 @@ def _add_visit(route: CEDOPADSRoute, problem_instance: CEDOPADSInstance, utility
     original_distance = compute_length_of_relaxed_dubins_path(q.angle_complement(), problem_instance.source, problem_instance.rho)
     for k in node_indices:
         for i in range(len(problem_instance.nodes[k].thetas)):
-            for (psi, tau) in get_samples(problem_instance, k, i):
+            for (psi, tau) in equidistant_samples(problem_instance, k, i):
                 visit = (k, psi, tau, problem_instance.sensing_radii[1])
                 q_v = problem_instance.get_state(visit)
 
@@ -161,7 +134,7 @@ def _add_visit(route: CEDOPADSRoute, problem_instance: CEDOPADSInstance, utility
         # Find the best candidate visit to add between route[idx:] and route[idx:]
         for k in node_indices:
             for i in range(len(problem_instance.nodes[k].thetas)):
-                for (psi, tau) in get_samples(problem_instance, k, i):
+                for (psi, tau) in equidistant_sampling(problem_instance, k, i):
                     visit = (k, psi, tau, problem_instance.sensing_radii[1])
                     q_v = problem_instance.get_state(visit)
 
@@ -186,7 +159,7 @@ def _add_visit(route: CEDOPADSRoute, problem_instance: CEDOPADSInstance, utility
     original_distance = compute_length_of_relaxed_dubins_path(q, problem_instance.sink, problem_instance.rho)
     for k in node_indices:
         for i in range(len(problem_instance.nodes[k].thetas)):
-            for (psi, tau) in get_samples(problem_instance, k, i):
+            for (psi, tau) in equidistant_sampling(problem_instance, k, i):
                 # TODO:
                 visit = (k, psi, tau, problem_instance.sensing_radii[1])
                 q_v = problem_instance.get_state(visit)
@@ -293,7 +266,7 @@ def hill_climbing(initial_route: CEDOPADSRoute, problem: CEDOPADSInstance, utili
             break
             
     # Add as many nodes as posible to the route, in order to increase the score.
-    best_route = greedily_add_visits_while_posible(best_route, problem, utility_function, best_distance)
+    best_route = greedily_add_visits_while_possible(best_route, problem, utility_function, best_distance)
 
     return best_route 
 
