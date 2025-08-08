@@ -8,14 +8,14 @@ import numpy as np
 from classes.problem_instances.cedopads_instances import CEDOPADSInstance, CEDOPADSRoute, Visit, UtilityFunction, utility_fixed_optical
 from library.core.dubins.relaxed_dubins import compute_length_of_relaxed_dubins_path, CCPath, CSPath, compute_relaxed_dubins_path
 from library.core.dubins.dubins_api import sample_dubins_path, compute_minimum_distance_to_point_from_dubins_path_segment, call_dubins
-from classes.data_types import State, Angle,AreaOfAcquisition, Matrix, Position, Vector, compute_difference_between_angles, Dir
+from classes.data_types import State, Angle, AreaOfAcquisition, Matrix, Position, Vector, compute_difference_between_angles, Dir
 from numpy.typing import ArrayLike
 import hashlib
 from tqdm import tqdm
 import itertools
 import matplotlib.pyplot as plt
 from scipy.stats import truncnorm
-from library.CEDOPADS_solvers.local_search_operators import remove_visit, greedily_add_visits_while_possible, add_free_visits, get_equidistant_samples
+from library.CEDOPADS_solvers.samplers import equidistant_sampling
 from dataclasses import dataclass, field
 from numba import njit
 
@@ -85,10 +85,10 @@ class GA:
         self.mu = mu
         self.number_of_nodes = len(self.problem_instance.nodes)
         self.node_indices = set(range(self.number_of_nodes))
-        self.node_indices_arrray = np.array(range(self.number_of_nodes))
+        self.node_indices_array = np.array(range(self.number_of_nodes))
         
-        self.r_default_mutation_step_size = (self.problem_instance.sensing_radii[1] - self.problem_instance.sensing_radii[0]) / 256
-        self.tau_default_mutation_step_size = self.problem_instance.eta / 256 
+        self.r_default_mutation_step_size = (self.problem_instance.sensing_radii[1] - self.problem_instance.sensing_radii[0]) / 128
+        self.tau_default_mutation_step_size = self.problem_instance.eta / 128 
 
         # Seed RNG for repeatability
         if seed is None:
@@ -125,7 +125,7 @@ class GA:
             # Initialize what we need to know from the individual
             scores = self.problem_instance.compute_scores_along_route(route, self.utility_function)
 
-            psi_mutation_step_sizes = [self.problem_instance.nodes[k].get_AOA(psi).phi / 256 for (k, psi, _, _) in route]
+            psi_mutation_step_sizes = [self.problem_instance.nodes[k].get_AOA(psi).phi / 128 for (k, psi, _, _) in route]
             tau_mutation_step_sizes = [self.tau_default_mutation_step_size for (_, _, _, _) in route]
             r_mutation_step_sizes = [self.r_default_mutation_step_size for (_, _, _, _) in route]
 
@@ -219,7 +219,7 @@ class GA:
             individual.route[i] = best_visit
             aoa = self.problem_instance.nodes[best_visit[0]].get_AOA(best_visit[1])
 
-            individual.psi_mutation_step_sizes[i] = aoa.phi / 256
+            individual.psi_mutation_step_sizes[i] = aoa.phi / 128
             individual.tau_mutation_step_sizes[i] = self.tau_default_mutation_step_size 
             individual.r_mutation_step_sizes[i] = self.r_default_mutation_step_size
 
@@ -243,7 +243,7 @@ class GA:
 
             aoa = self.problem_instance.nodes[best_visit[0]].get_AOA(best_visit[1])
 
-            individual.psi_mutation_step_sizes.insert(i,  aoa.phi / 256)
+            individual.psi_mutation_step_sizes.insert(i,  aoa.phi / 128)
             individual.tau_mutation_step_sizes.insert(i, self.tau_default_mutation_step_size)
             individual.r_mutation_step_sizes.insert(i, self.r_default_mutation_step_size)
             
@@ -310,7 +310,9 @@ class GA:
                     best_visit = visit
                     sdr_of_best_visit = sdr_of_visit
                     score_of_best_visit = score
-    
+
+        assert best_visit != None  
+
         return best_visit, sdr_of_best_visit, score_of_best_visit
 
     def pick_visit_to_insert_based_on_SDR (self, route: CEDOPADSRoute, i: int, m: int = 3) -> Tuple[Visit, float]:
@@ -331,8 +333,7 @@ class GA:
         weights = self.sdrs_for_overwrite[self.mask_for_overwrite]
         probs = weights / np.sum(weights)
 
-        # TODO: use the actual path where the visit is inserted to determine the appropriate k
-        ks = np.random.choice(self.node_indices_arrray[self.mask_for_overwrite], size = m, p = probs)
+        ks = np.random.choice(self.node_indices_array[self.mask_for_overwrite], size = m, p = probs)
 
         # Find the actual best visit for visiting node k according to the SDR score.
         best_visits_and_information = [self.pick_best_explored_visit_based_on_sdr(route, i, k) for k in ks]
@@ -340,6 +341,49 @@ class GA:
         idx = np.argmax([sdr for (_, sdr, _) in best_visits_and_information])
         return best_visits_and_information[idx][0], best_visits_and_information[idx][2]
 
+    def non_self_adaptive_scalar_mutation (self, individual: Individual, eps: float = 0.01):
+        """Simply mutates every scalar within the individual"""
+        n = max(0, min(np.random.geometric(1 - 0.2) - 1, len(individual)))
+        indices = np.random.choice(len(individual), n, replace = False)
+
+        N_r = np.random.normal(0, np.sqrt((self.problem_instance.sensing_radii[1] - self.problem_instance.sensing_radii[0]) / 128), size=n)
+        N_tau = np.random.normal(0, np.sqrt(self.problem_instance.eta / 128), size=n)
+
+        for i, j in enumerate(indices):
+            (k, psi, tau, r) = individual.route[j]
+            new_r = np.clip(r + N_r[i], self.problem_instance.sensing_radii[0], self.problem_instance.sensing_radii[1])
+            aoa = self.problem_instance.nodes[k].AOAs[individual.aoa_indices[j]]
+            N_psi = np.random.normal(0, np.sqrt(aoa.phi / 128))
+
+            new_psi = psi + N_psi
+            if not aoa.contains_angle(new_psi):
+                # Move counterclockwise if N_psi > 0 and clockwise otherwise.
+                change_in_aoa_idx = 1 if N_psi > 0 else -1 
+                individual.aoa_indices[j] = (individual.aoa_indices[j] + change_in_aoa_idx) % len(self.problem_instance.nodes[k].AOAs) 
+                new_aoa = self.problem_instance.nodes[k].AOAs[individual.aoa_indices[j]]
+
+                # Pick the angle closest to the original angle, from the new aoa
+                new_psi = new_aoa.a if change_in_aoa_idx == 1 else new_aoa.b
+                delta_psi = new_psi - psi
+
+            else:
+                delta_psi = N_psi
+
+            # Update tau but make sure that target k remains within the observation cone
+            new_tau = (tau + N_tau[i] + delta_psi) % (2 * np.pi)
+            if compute_difference_between_angles(new_tau, (new_psi + np.pi) % (2 * np.pi)) > self.problem_instance.eta / 2:
+                # If this is not the case, simply move tau the same amount as N_tau.
+                new_tau = (tau + delta_psi) % (2 * np.pi) 
+
+            # Update the information in the individual
+            individual.route[j] = (k, new_psi, new_tau, new_r)
+            individual.states[j] = self.problem_instance.get_state(individual.route[j])
+            individual.scores[j] = self.problem_instance.compute_score_of_visit(individual.route[j], self.utility_function)
+
+        individual.segment_lengths = None
+
+        return individual
+        
     def self_adaptive_scalar_mutation (self, individual: Individual, eps: float = 0.01, c_psi: float = 1.0, c_tau: float = 1.0, c_r: float = 1.0) -> Individual:
         """Mutates the angles of the individual by sampling from a uniform or truncated normal distribution."""
         # 1. Update mutation step sizes.
@@ -396,7 +440,7 @@ class GA:
             individual.states[j] = self.problem_instance.get_state(individual.route[j])
             individual.scores[j] = self.problem_instance.compute_score_of_visit(individual.route[j], self.utility_function)
 
-            individual.segment_lengths = None # Signals that they need to be recomputed.
+        individual.segment_lengths = None # Signals that they need to be recomputed.
 
         return individual
 
@@ -497,6 +541,7 @@ class GA:
         number_of_visits_to_optimize = min(len(individual), maximum_number_of_visits_to_optimize)
         maximal_remaining_distance_budget_per_visit = t_remaining / number_of_visits_to_optimize
 
+        # TODO: Think a bit more about these probs
         inverse_sdr_scores = np.array([(in_bound_dist + out_bound_dist) / (score + 0.001) for score, in_bound_dist, out_bound_dist in zip(individual.scores, individual.segment_lengths[:-1], individual.segment_lengths[1:])])
         inverse_ratio_of_maximal_scores = np.array([self.problem_instance.nodes[k].base_line_score / (score + 0.001) for score, (k, _, _, _) in zip(individual.scores, individual.route)])
 
@@ -613,14 +658,15 @@ class GA:
         possible_candidates = list(set(range(self.number_of_nodes)).difference(blacklist))
 
         # TODO: These possible candidates needs to be reduced in some way! instead of computing these minimum distances, which is waaaaay to expensive.
-        distances = [compute_minimum_distance_to_point_from_dubins_path_segment(self.problem_instance.nodes[k].pos, q_i, sub_segment_types, sub_segment_lengths, self.problem_instance.rho) for k in possible_candidates]
-        candidates = [k for k, dist in zip(possible_candidates, distances) if dist < self.problem_instance.sensing_radii[1]]
+        #distances = [compute_minimum_distance_to_point_from_dubins_path_segment(self.problem_instance.nodes[k].pos, q_i, sub_segment_types, sub_segment_lengths, self.problem_instance.rho) for k in possible_candidates]
+        #candidates = [k for k, dist in zip(possible_candidates, distances) if dist < self.problem_instance.sensing_radii[1]]
+        candidates = possible_candidates
 
         # Find candidate visits based on discrete sampling of the path segment at seg_idx.
         # NOTE: each candidate visit is build in the following manner (idx, phi, tau, r)
         # where idx is used to ensure that they are added to the route in the correct order.
-        candidate_visits: Dict[int, List[Tuple[int, Angle, Angle, float]]] = {}
-        for idx, configuration in enumerate(sample_dubins_path(q_i, sub_segment_types, sub_segment_lengths, self.problem_instance.rho, delta = (self.problem_instance.sensing_radii[1] - self.problem_instance.sensing_radii[0]), flip_angles = (seg_idx == 0))):
+        candidate_visits: Dict[int, List[Visit]] = {}
+        for idx, configuration in enumerate(sample_dubins_path(q_i, sub_segment_types, sub_segment_lengths, self.problem_instance.rho + 0.001, delta = (self.problem_instance.sensing_radii[1] - self.problem_instance.sensing_radii[0]), flip_angles = (seg_idx == 0))):
             for k in candidates:
                 delta = self.problem_instance.nodes[k].pos - configuration.pos 
                 r = np.linalg.norm(delta)
@@ -663,7 +709,7 @@ class GA:
         aoa_indices = []
         for (k, phi, _, _) in visits:
             aoa = self.problem_instance.nodes[k].get_AOA(phi)
-            psi_mutation_step_sizes.append(aoa.phi / 256)
+            psi_mutation_step_sizes.append(aoa.phi / 128)
             aoa_indices.append(self.problem_instance.nodes[k].AOAs.index(aoa))
 
         individual.aoa_indices = individual.aoa_indices[:seg_idx] + aoa_indices + individual.aoa_indices[seg_idx:]
@@ -734,6 +780,9 @@ class GA:
     def run(self, time_budget: float, display_progress_bar: bool = False, trace: bool = False) -> CEDOPADSRoute:
         """Runs the genetic algorithm for a prespecified time, given by the time_budget, using k-point crossover with m parents."""
         if trace:
+            info_mean_psi_step_size = []
+            info_mean_tau_step_size = [] 
+            info_mean_r_step_size = []
             info_mean_fitness = []
             info_min_fitness = []
             info_max_fitness = []
@@ -750,7 +799,7 @@ class GA:
         self.explored_scores = {}
 
         for k in range(len(self.problem_instance.nodes)):
-            self.explored_visits[k] = list(get_equidistant_samples(self.problem_instance, k))
+            self.explored_visits[k] = list(equidistant_sampling(self.problem_instance.nodes[k], self.problem_instance.eta, self.problem_instance.sensing_radii))
             self.explored_states[k] = self.problem_instance.get_states(self.explored_visits[k])
             self.explored_scores[k] = self.problem_instance.compute_scores_along_route(self.explored_visits[k], self.utility_function)
 
@@ -785,9 +834,10 @@ class GA:
                 length_of_best_route = self.problem_instance.compute_length_of_route(self.population[idx_of_individual_with_highest_fitness].route)
                 avg_length = sum(len(individual) for individual in self.population) / self.mu
                 pbar.set_postfix({
-                        "Gen": gen,
-                        "Best": f"({self.fitnesses[idx_of_individual_with_highest_fitness]:.1f}, {length_of_best_route:.1f}, {len(self.population[idx_of_individual_with_highest_fitness])})",
-                        "Aver": f"({avg_fitness:.1f}, {avg_distance:.1f}, {avg_length:.1f})"
+                        "Generation": gen,
+                        "Best Feasible": f"({self.fitnesses[idx_of_individual_with_highest_fitness]:.1f}, {length_of_best_route:.1f}, {len(self.population[idx_of_individual_with_highest_fitness])})",
+                        "Average": f"({avg_fitness:.1f}, {avg_distance:.1f}, {avg_length:.1f})",
+                        "STD in fitness": f"{np.std(self.fitnesses):.1f}"
                     })
             
             if trace:
@@ -796,7 +846,7 @@ class GA:
                 info_max_fitness.append(np.max(self.fitnesses))
                 info_goat_fitness.append(self.fitnesses[idx_of_individual_with_highest_fitness])
 
-            while time.time() - start_time < time_budget:
+            while (time_used := time.time() - start_time) < time_budget:
                 # Generate new offspring using parent selection based on the computed fitnesses, to select m parents
                 # and perform k-point crossover using these parents, to create a total of m^k children which is
                 # subsequently mutated according to the mutation_probability, this also allows the "jiggeling" of 
@@ -815,20 +865,27 @@ class GA:
                 self.population = self.mu_comma_lambda_selection(offspring)
 
                 # Memetic operators (Add free visits & optimize visits)
+                prob_for_checking_if_free_visits_can_be_added = np.exp(np.sqrt(time_used / time_budget) - 1) / 4
                 for idx, individual in enumerate(self.population):
-                    # TODO Increase the number of segments to look at throughout the search.
-                    individual, indices_of_free_visits_added = self.add_free_visits(individual)
+                    segment_indices = np.random.choice(len(individual) + 1, size=int(np.ceil(len(individual) * prob_for_checking_if_free_visits_can_be_added)), replace=False)
 
-                    if (m := len(indices_of_free_visits_added)) != 0:
-                        # TODO: Remove once we compute the lengths of the new path segments within the add_free_visits method.
-                        individual.segment_lengths = self.problem_instance.compute_lengths_of_route_segments_from_states(individual.states)
-                        for jdx_of_free_visit_added in indices_of_free_visits_added:
-                            # Compute the segment lengths of the new visits.
-                            score = self.problem_instance.compute_score_of_visit(individual.route[jdx_of_free_visit_added], self.utility_function)
-                            sdr_score =  score / (individual.segment_lengths[jdx_of_free_visit_added] + individual.segment_lengths[jdx_of_free_visit_added + 1])
-                            # NOTE: here we are only interested in picking visits that the decrease the total distance of the route, due to the numeric instability of the dubins path segments.
-                            # hence the maximal_extra_distance_budget = 0.
-                            individual = self.optimize_visit(individual, jdx_of_free_visit_added, sdr_score, maximal_extra_distance_budget=0) 
+                    offset = 0
+                    for segment_idx in sorted(segment_indices):
+                        individual, indices_of_free_visits_added = self.add_free_visits(individual, segment_idx + offset)
+
+                        if (m := len(indices_of_free_visits_added)) != 0:
+                            # TODO: Remove once we compute the lengths of the new path segments within the add_free_visits method.
+                            individual.segment_lengths = self.problem_instance.compute_lengths_of_route_segments_from_states(individual.states)
+                            amount_over_distance_budget = self.problem_instance.t_max - sum(individual.segment_lengths)
+                            for jdx_of_free_visit_added in indices_of_free_visits_added:
+                                # Compute the segment lengths of the new visits.
+                                score = self.problem_instance.compute_score_of_visit(individual.route[jdx_of_free_visit_added], self.utility_function)
+                                sdr_score =  score / (individual.segment_lengths[jdx_of_free_visit_added] + individual.segment_lengths[jdx_of_free_visit_added + 1])
+                                # NOTE: here we are only interested in picking visits that the decrease the total distance of the route if it is to long,
+                                # due to the numeric instability of the dubins path segments. Hence the maximal_extra_distance_budget = amount_over_distance_budget.
+                                individual = self.optimize_visit(individual, jdx_of_free_visit_added, sdr_score, maximal_extra_distance_budget=amount_over_distance_budget / m) 
+
+                            offset += m
 
                     self.population[idx] = self.optimize_visits(individual, maximum_number_of_visits_to_optimize = 2, maximum_number_of_attempts = 4)
                 
@@ -841,7 +898,7 @@ class GA:
 
                 cdf = np.add.accumulate(probabilities)
 
-                idx_of_individual_with_highest_fitness = np.argmax(self.fitnesses)
+                idx_of_individual_with_highest_fitness = np.argmax(self.fitnesses * np.array([1 if sum(individual.segment_lengths) <= self.problem_instance.t_max else 0 for individual in self.population]))
                 if self.fitnesses[idx_of_individual_with_highest_fitness] > self.highest_fitness_recorded:
                     self.individual_with_highest_recorded_fitness = deepcopy(self.population[idx_of_individual_with_highest_fitness])
                     self.highest_fitness_recorded = self.fitnesses[idx_of_individual_with_highest_fitness]
@@ -860,13 +917,16 @@ class GA:
                     length_of_best_route = sum(self.individual_with_highest_recorded_fitness.segment_lengths) 
                     avg_length = sum(len(route) for route in self.population) / self.mu
                     pbar.set_postfix({
-                            "Gen": gen,
-                            "Best": f"({self.highest_fitness_recorded:.1f}, {self.length_of_individual_with_highest_recorded_fitness:.1f}, {len(self.individual_with_highest_recorded_fitness)})",
-                            "Aver": f"({avg_fitness:.1f}, {avg_distance:.1f}, {avg_length:.1f})",
-                            "Var": f"{np.var(self.fitnesses):.1f}"
+                            "Generation": gen,
+                            "Best Feasible": f"({self.highest_fitness_recorded:.1f}, {self.length_of_individual_with_highest_recorded_fitness:.1f}, {len(self.individual_with_highest_recorded_fitness)})",
+                            "Average": f"({avg_fitness:.1f}, {avg_distance:.1f}, {avg_length:.1f})",
+                            "STD in fitness": f"{np.std(self.fitnesses):.1f}"
                     })
 
                 if trace:
+                    info_mean_r_step_size.append(np.mean([np.mean(individual.r_mutation_step_sizes) for individual in self.population]))
+                    info_mean_psi_step_size.append(np.mean([np.mean(individual.psi_mutation_step_sizes) for individual in self.population]))
+                    info_mean_tau_step_size.append(np.mean([np.mean(individual.tau_mutation_step_sizes) for individual in self.population]))
                     info_mean_fitness.append(np.mean(self.fitnesses))
                     info_min_fitness.append(np.min(self.fitnesses))
                     info_max_fitness.append(np.max(self.fitnesses))
@@ -875,13 +935,27 @@ class GA:
         # Plot information if a trace is requested.
         if trace:
             plt.style.use("ggplot")
+            # First plot: Fitness statistics
+            fig, (ax1, ax2) = plt.subplots(2, 1)
             xs = list(range(gen + 1))
-            plt.fill_between(xs, info_min_fitness, info_max_fitness, label="Fitnesses", color="tab:blue", alpha=0.6)
-            plt.plot(xs, info_mean_fitness, color="tab:blue", label="Mean Fitness")
-            plt.plot(xs, info_goat_fitness, color="black", label="GOAT fitness")
-            plt.legend()
-            plt.xlabel("Generation")
-            plt.ylabel("Fitness")
+            ax1.fill_between(xs, info_min_fitness, info_max_fitness, label="Fitnesses", color="tab:blue", alpha=0.6)
+            ax1.plot(xs, info_mean_fitness, color="tab:blue", label="Mean Fitness")
+            ax1.plot(xs, info_goat_fitness, color="black", label="GOAT fitness")
+            ax1.legend()
+            ax1.set_xlabel("Generation")
+            ax1.set_ylabel("Fitness")
+            ax1.set_title("Fitness Statistics")
+
+            # Second plot: Mutation step sizes
+            xs = list(range(1, gen + 1))
+            ax2.plot(xs, info_mean_psi_step_size, color="tab:orange", label="Mean $\\psi$ mutation step size")
+            ax2.plot(xs, info_mean_tau_step_size, color="tab:purple", label="Mean $\\tau$ mutation step size")
+            ax2.plot(xs, info_mean_r_step_size, color="tab:green", label="Mean $r$ mutation step size")
+            ax2.legend()
+            ax2.set_xlabel("Generation")
+            ax2.set_ylabel("Mutation Step Size")
+            ax2.set_title("Mean Mutation Step Sizes")
+
             plt.show()
 
         return self.individual_with_highest_recorded_fitness.route
@@ -894,7 +968,4 @@ if __name__ == "__main__":
     #import cProfile
     #cProfile.run("ga.run(300, display_progress_bar = True)", sort = "cumtime")
     route = ga.run(300, display_progress_bar=True, trace=True)
-    augmented_route = add_free_visits(problem_instance, route, utility_function)
-    print(f"Score of augmented route: {problem_instance.compute_score_of_route(augmented_route, utility_function)} from {problem_instance.compute_score_of_route(route, utility_function)}")
-    problem_instance.plot_with_route(route, utility_function)
-    plt.show()
+    problem_instance.plot_with_route(route, utility_function, show=True)
