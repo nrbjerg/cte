@@ -32,6 +32,7 @@ def utility_fixed_optical(base_line_score: float, theta: Angle, phi: Angle, psi:
     return base_line_score * weight_from_psi * weight_from_tau
 
 def utility_baseline (base_line_score: float, theta: Angle, phi: Angle, psi: Angle, tau: Angle, r: float, eta: Angle) -> float:
+    """Simply returns the base line score."""
     return base_line_score
 
 # ------------------------------------------------- Misc Definitions -------------------------------------------- #
@@ -219,7 +220,7 @@ class CEDOPADSInstance:
         plt.title(f"{self.problem_id}, ($t_{{max}}: {self.t_max}, \\rho: {self.rho}, \\eta: {self.eta}$)")
 
         if show:
-            plt.plot()
+            plt.show()
     
     def get_state (self, visit: Visit) -> State:
         """Gets the state associated with the given visit"""
