@@ -234,7 +234,7 @@ def _compute_length_of_relaxed_dubins_path(q_pos: Position, q_angle: Angle, p: P
     if p_prime[0] >= 0: # Candidates are LS and RL
         distance_from_c_r = np.linalg.norm(p_prime - c_r)
         if distance_from_c_r < rho or (distance_from_c_r == rho and p_prime[0] < 0):
-            intersection_points = [point for point in get_intersection_points_between_circles(c_l, 2 * rho, p_prime, rho) if point[1] >= 0]
+            intersection_points = [point for point in get_intersection_points_between_circles(c_l, 2 * rho, p_prime, rho) if point[1] >= -0.0001]
             second_arc_center = intersection_points[0]
             u = np.arctan(second_arc_center[1] / (rho + second_arc_center[0]))
 
