@@ -62,7 +62,7 @@ class GA:
         self.mu = mu
         self.number_of_nodes = len(self.problem.nodes)
         self.node_indices = set(range(self.number_of_nodes))
-        self.node_indices_arrray = np.array(range(self.number_of_nodes))
+        self.node_indices_array = np.array(range(self.number_of_nodes))
         
         # Seed RNG for repeatability
         if seed is None:
@@ -99,7 +99,7 @@ class GA:
 
         weights = self.sdrs_for_overwrite[self.mask_for_overwrite]
         probs =  weights / np.sum(weights)
-        k = np.random.choice(self.node_indices_arrray[self.mask_for_overwrite], p = probs)
+        k = np.random.choice(self.node_indices_array[self.mask_for_overwrite], p = probs)
         psi = random.choice(self.problem.nodes[k].intervals).generate_uniform_angle()
         tau = (psi + np.pi + np.random.uniform( - self.eta / 2, self.eta / 2)) % (2 * np.pi)
 

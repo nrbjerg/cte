@@ -74,7 +74,7 @@ class GA:
         self.xi = xi
         self.number_of_nodes = len(self.problem_instance.nodes)
         self.node_indices = set(range(self.number_of_nodes))
-        self.node_indices_arrray = np.array(range(self.number_of_nodes))
+        self.node_indices_array = np.array(range(self.number_of_nodes))
         
         # Seed RNG for repeatability
         if seed is None:
@@ -211,7 +211,7 @@ class GA:
         probs = weights / np.sum(weights)
 
         # TODO: use the actual path where the visit is inserted to determine the appropriate k
-        k = np.random.choice(self.node_indices_arrray[self.mask_for_overwrite], p = probs)
+        k = np.random.choice(self.node_indices_array[self.mask_for_overwrite], p = probs)
 
         # Find the actual best visit for visiting node k according to the SDR score.
         best_visit = None
