@@ -58,9 +58,9 @@ def _sample_dubins_path(q_i: Tuple[float, float, Angle], sub_segment_types: Iter
             case Dir.S:
                 # Iterate over n total 
                 n = int(np.ceil(seg_length / delta)) + 1
-                offset = (1 / n) * np.array([np.cos(angle), np.sin(angle)])
+                offset = (seg_length / n) * np.array([np.cos(angle), np.sin(angle)])
                 for k in range(1, n):
-                    yield pos + k * offset, angle
+                    yield (pos + k * offset, angle)
 
                 pos += n * offset
 
@@ -89,8 +89,8 @@ def _sample_dubins_path(q_i: Tuple[float, float, Angle], sub_segment_types: Iter
                 # Update angle and position
                 pos = center + rho * np.array([np.cos(angle - np.pi / 2 + seg_length / rho), np.sin(angle - np.pi / 2 + seg_length / rho)])
                 angle = (angle + seg_length / rho) % (2 * np.pi)
-
-    yield (pos, angle)
+            
+        yield (pos, angle)
 
 def call_dubins(q_i: State, q_f: State, rho: float) -> Tuple[Tuple[Dir, Dir, Dir], Tuple[float, float, float]]:
     """Calls the dubins library and converts the results into the used formats."""
@@ -112,7 +112,7 @@ def call_dubins(q_i: State, q_f: State, rho: float) -> Tuple[Tuple[Dir, Dir, Dir
 
     return (int_to_dir_string[path_type_dubins], segment_lengths)
 
-def compute_minimum_distance_to_point_from_dubins_path_segment(p: Position, q: Tuple[float, float, Angle], seg_types: Iterable[Dir], seg_lengths: Iterable[float], rho: float) -> float:
+def compute_minimum_distance_to_point_from_dubins_path_segment(p: Position, q: State, seg_types: Iterable[Dir], seg_lengths: Iterable[float], rho: float) -> float:
     """Simply a wrapper."""
     return _compute_minimum_distance_to_point_from_dubins_path_segment(p, q.to_tuple(), seg_types, seg_lengths, rho)
 

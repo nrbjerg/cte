@@ -676,10 +676,10 @@ class GA:
         # Compute a list of candidate nodes to speed up the computation.
         if seg_idx != 0 and seg_idx != len(individual):
             q_i, q_f = individual.states[seg_idx - 1:seg_idx + 1]
-            (sub_segment_types, sub_segment_lengths) = call_dubins(q_i, q_f, self.problem_instance.rho)
+            (sub_segment_types, sub_segment_lengths) = call_dubins(q_i, q_f, self.problem_instance.rho + 0.001)
         else: 
             q_i = individual.states[0].angle_complement() if seg_idx == 0 else individual.states[-1]
-            path_segment = compute_relaxed_dubins_path(q_i, self.problem_instance.source, self.problem_instance.rho)
+            path_segment = compute_relaxed_dubins_path(q_i, self.problem_instance.source if seg_idx == 0 else self.problem_instance.sink, self.problem_instance.rho + 0.001)
                 
             # Check the two types.
             if type(path_segment) == CSPath:
@@ -697,12 +697,25 @@ class GA:
         i, j = individual.route[seg_idx - 1][0] if seg_idx != 0 else self.number_of_nodes, individual.route[seg_idx][0] if seg_idx != len(individual) else self.number_of_nodes + 1
 
         # TODO: These possible candidates needs to be reduced in some way! instead of computing these minimum distances, which is waaaaay to expensive.
-        distances = [compute_minimum_distance_to_point_from_dubins_path_segment(self.problem_instance.nodes[k].pos, q_i, sub_segment_types, sub_segment_lengths, self.problem_instance.rho) for k in possible_candidates]
-        candidates_by_min_distance_to_dubins_path_segment = [k for k, dist in zip(possible_candidates, distances) if dist < self.problem_instance.sensing_radii[1]]
+        #distances = [compute_minimum_distance_to_point_from_dubins_path_segment(self.problem_instance.nodes[k].pos, q_i, sub_segment_types, sub_segment_lengths, self.problem_instance.rho) for k in possible_candidates]
+        #candidates_by_min_distance_to_dubins_path_segment = [k for k, dist in zip(possible_candidates, distances) if dist < self.problem_instance.sensing_radii[1]]
         #candidates = possible_candidates
-        candidates_by_min_distance_to_line_segment = [k for k in possible_candidates if self.distances_to_line_segments[i, j, k] < 2 * self.problem_instance.sensing_radii[1] + 3 * self.problem_instance.rho]
+        candidates_by_min_distance_to_line_segment = [k for k in possible_candidates if self.distances_to_line_segments[i, j, k] < 2 * self.problem_instance.sensing_radii[1] + 2 * self.problem_instance.rho]
 
-        assert len(set(candidates_by_min_distance_to_dubins_path_segment).difference(candidates_by_min_distance_to_line_segment)) == 0
+        # Debuging
+        # Plot the nodes which where not found
+        #plt.scatter(*q_i.pos, color = "tab:blue", zorder = 4)
+        #for k in candidates_by_min_distance_to_line_segment:
+        #    plt.scatter(*self.problem_instance.nodes[k].pos, color = "tab:green", zorder = 4, s = 40)
+
+        #for k in candidates_by_min_distance_to_dubins_path_segment:
+        #    plt.scatter(*self.problem_instance.nodes[k].pos, color = "tab:purple", zorder=5)
+
+        #for idx, configuration in enumerate(sample_dubins_path(q_i, sub_segment_types, sub_segment_lengths, self.problem_instance.rho + 0.001, delta = (self.problem_instance.sensing_radii[1] - self.problem_instance.sensing_radii[0]) / 2, flip_angles = (seg_idx == 0))):
+        #    plt.scatter(*configuration.pos, color="tab:blue", zorder=6)
+
+        #self.problem_instance.plot_with_route(individual.route, self.utility_function, show = True)
+
         candidates = candidates_by_min_distance_to_line_segment
 
         # Find candidate visits based on discrete sampling of the path segment at seg_idx.
@@ -850,10 +863,10 @@ class GA:
         positions = np.concatenate((np.array([node.pos for node in self.problem_instance.nodes]), self.problem_instance.source.reshape(1, 2), self.problem_instance.sink.reshape(1, 2)))
         scores = np.array([node.base_line_score for node in self.problem_instance.nodes])
         self.distances_to_line_segments = compute_distances_from_nodes_to_line_segments(positions)
-        self.sdr_tensor = compute_sdr_tensor(positions, scores, 2.0, 2.0)
-        #self.sdr_tensor = compute_score_distance_from_line_segments_ratio_tensor(self.distances_to_line_segments, 
-        #                                                                         np.array([node.base_line_score for node in self.problem_instance.nodes]), 
-        #                                                                         self.problem_instance.sensing_radii[1])
+        #self.sdr_tensor = compute_sdr_tensor(positions, scores, 2.0, 2.0)
+        self.sdr_tensor = compute_score_distance_from_line_segments_ratio_tensor(self.distances_to_line_segments, 
+                                                                                 np.array([node.base_line_score for node in self.problem_instance.nodes]), 
+                                                                                 self.problem_instance.sensing_radii[1])
         self.sdrs_for_overwrite = np.empty_like(self.sdr_tensor[0][0]) 
         self.default_mask = np.ones(self.number_of_nodes, dtype=bool)
         self.mask_for_overwrite = np.empty_like(self.default_mask)
