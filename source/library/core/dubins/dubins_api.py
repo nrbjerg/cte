@@ -134,8 +134,6 @@ def _compute_minimum_distance_to_point_from_dubins_path_segment(p: Position, q: 
 
             # Otherwise project onto the line segment, to find the closest point.
             offset = seg_length * np.array([np.cos(angle), np.sin(angle)])
-            end_pos = pos + offset
-            v = end_pos - pos
             t = np.dot(p - pos, offset) / (seg_length ** 2) 
 
             # Compute minimum distance to closest point 
