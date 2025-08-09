@@ -3,21 +3,20 @@ import dubins
 from copy import deepcopy
 import random
 import time
-from typing import List, Optional, Callable, Set, Tuple, Dict
+from typing import List, Optional, Set, Tuple, Dict
 import numpy as np
 from classes.problem_instances.cedopads_instances import CEDOPADSInstance, CEDOPADSRoute, Visit, UtilityFunction, utility_fixed_optical
 from library.core.dubins.relaxed_dubins import compute_length_of_relaxed_dubins_path, CCPath, CSPath, compute_relaxed_dubins_path
 from library.core.dubins.dubins_api import sample_dubins_path, compute_minimum_distance_to_point_from_dubins_path_segment, call_dubins
-from classes.data_types import State, Angle, AreaOfAcquisition, Matrix, Position, Vector, compute_difference_between_angles, Dir
+from classes.data_types import State, Matrix, Position, Vector, compute_difference_between_angles, Dir
 from numpy.typing import ArrayLike
 import hashlib
 from tqdm import tqdm
 import itertools
 import matplotlib.pyplot as plt
-from scipy.stats import truncnorm
 from library.CEDOPADS_solvers.samplers import equidistant_sampling
-from dataclasses import dataclass, field
-from numba import njit
+from dataclasses import dataclass
+import numba as nb 
 
 @dataclass()
 class Individual:
@@ -43,9 +42,48 @@ class Individual:
         visits = [f"({int(k)}, {float(psi):.1f}, {float(tau):.1f}, {r:.1f})" for (k, psi, tau, r) in self.route]
         return "[" + " ".join(visits) + "]"
 
-@njit()
+@nb.njit()
+def compute_distances_from_nodes_to_line_segments(positions: Matrix) -> ArrayLike:
+    """Computes the distances from each node to the line segment between to nodes"""
+    # NOTE: Remember that positions is node[1].pos, ..., node[self.number_of_nodes], source, sink
+    n = positions.shape[0] - 2  
+    tensor = np.zeros((n + 2, n + 2, n))
+    for i in range(n + 2):
+        for j in range(n + 2):
+            for k in range(n):
+                if (positions[i] == positions[j]).all():
+                    tensor[i, j, k] = np.linalg.norm(positions[i] - positions[k])
+
+                else:
+                    offset = positions[j] - positions[i]
+                    t = np.dot(positions[k] - positions[i], offset) / np.dot(offset, offset)
+                    tensor[i, j, k] = np.linalg.norm(positions[k] - (positions[i] + max(0.0, min(t, 1.0)) * offset))
+
+    return tensor
+
+@nb.njit()
+def compute_score_distance_from_line_segments_ratio_tensor(distance_to_line_segments: ArrayLike, scores: ArrayLike, maximal_sensing_radius: float) -> ArrayLike:
+    """Computes a tensor consisting of all of the distances between the nodes"""
+    # NOTE: Remember that positions is node[1].pos, ..., node[self.number_of_nodes], source, sink
+    n = scores.shape[0]
+
+    tensor = np.zeros((n + 2, n + 2, n))
+    for i in range(n + 2):
+        for j in range(n + 2):
+            for k in range(n):
+                if k == i or k == j:
+                    continue
+
+                # Compute the length between the line segment between position i and position j and the point at position k
+                tensor[i, j, k] = scores[k] / max(maximal_sensing_radius, distance_to_line_segments[i, j, k]) # NOTE: The 0.01 is used to prevent numerical errors, if we get a 0 we might divide by inf.
+                tensor[j, i, k] = tensor[i, j, k]
+
+    return tensor
+
+@nb.njit()
 def compute_sdr_tensor(positions: Matrix, scores: ArrayLike, c_s: float, c_d: float) -> ArrayLike:
     """Computes a tensor consisting of all of the distances between the nodes"""
+    # NOTE: Remember that positions is node[1].pos, ..., node[self.number_of_nodes], source, sink
     n = positions.shape[0] - 2
     tensor = np.zeros((n + 2, n + 2, n))
     for i in range(n + 2):
@@ -57,12 +95,12 @@ def compute_sdr_tensor(positions: Matrix, scores: ArrayLike, c_s: float, c_d: fl
                 #    continue
 
                 # Compute the length between the line segment between position i and position j and the point at position k
-                # link to an explaination of the formula: https://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line
+                # link to an explanation of the formula: https://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line
                 area = np.abs((positions[i][1] - positions[j][1]) * positions[k][0] - (positions[i][0] - positions[j][0]) * positions[k][1] + positions[i][0] * positions[j][1] - positions[i][1] * positions[j][0])
 
                 distance = (area + 0.01) / (np.linalg.norm(positions[i] - positions[j]) + 0.01) # We need to not divide by 0 both here and later.
-                # NOTE: the 0.01 is used in case the area is 0, which happends if the points at positions i,j and k are colinear
-                tensor[i, j, k] = scores[k] ** c_s / distance ** c_d # NOTE: The 0.01 is used to prevent nummerical errors, if we get a 0 we might divide by inf.
+                # NOTE: the 0.01 is used in case the area is 0, which happens if the points at positions i,j and k are colinear
+                tensor[i, j, k] = scores[k] ** c_s / distance ** c_d # NOTE: The 0.01 is used to prevent numerical errors, if we get a 0 we might divide by inf.
                 tensor[j, i, k] = tensor[i, j, k]
 
     return tensor
@@ -169,13 +207,13 @@ class GA:
             # Fix any mishaps when the child was created, i.e. make sure that the same node i never visited twice.
             ks = {route[idx][0] for idx in range(i, j + 1)} 
 
-            # NOTE: Normaly the order of the visits is reversed, however since our distance "metric" is in this case non-symetric we will not use this convention.
+            # NOTE: Normaly the order of the visits is reversed, however since our distance "metric" is in this case non-symmetric we will not use this convention.
             indices_which_may_replace = [idx for idx in range(i, j) if paternal.route[idx][0] not in ks]
             number_of_visits_replaced, number_of_visits_which_can_be_replaced = 0, len(indices_which_may_replace)
 
             indices_to_remove = []
             for idx in itertools.chain(range(i), range(j, len(route))):
-                # Replace the visit with one from the other parent if posible otherwise simply remove the visit entirely
+                # Replace the visit with one from the other parent if possible otherwise simply remove the visit entirely
                 if route[idx][0] in ks:
                     if number_of_visits_replaced < number_of_visits_which_can_be_replaced:
                         route[idx] = paternal.route[indices_which_may_replace[number_of_visits_replaced]]
@@ -230,7 +268,7 @@ class GA:
 
         indices_to_skip = indices
 
-        # Insert visists within the route the route.
+        # Insert visits within the route the route.
         n = max(0, min(np.random.geometric(1 - q) - 1, len(individual)))
         indices = sorted(np.random.choice(len(individual) + 1, n, replace = False))
         for j, i in enumerate(reversed(indices), 1):
@@ -534,18 +572,17 @@ class GA:
         individual.segment_lengths = self.problem_instance.compute_lengths_of_route_segments_from_states(individual.states)
 
         # At each iteration we are allowed extend the route by a distance of t_remaining / n_iterations, if it increases the SDR or simply the score.
+        # Alternatively if t_remaining < 0 the algorithm will try to decrease the length of the route.
         t_remaining = self.problem_instance.t_max - sum(individual.segment_lengths)
-        if t_remaining < 0: # Do if we dont have the budget nothing
-            return individual
 
         number_of_visits_to_optimize = min(len(individual), maximum_number_of_visits_to_optimize)
         maximal_remaining_distance_budget_per_visit = t_remaining / number_of_visits_to_optimize
 
-        # TODO: Think a bit more about these probs
         inverse_sdr_scores = np.array([(in_bound_dist + out_bound_dist) / (score + 0.001) for score, in_bound_dist, out_bound_dist in zip(individual.scores, individual.segment_lengths[:-1], individual.segment_lengths[1:])])
         inverse_ratio_of_maximal_scores = np.array([self.problem_instance.nodes[k].base_line_score / (score + 0.001) for score, (k, _, _, _) in zip(individual.scores, individual.route)])
 
-        # We want to pick the visits with either the lowest score ratio (i.e. the visits where the score can be increased the most or the visits where the SDR score is lowest)
+        # We want to pick the visits with either the lowest score ratio (i.e. the visits where the score can be increased the most)
+        # or the visits where the SDR score is lowest, since it is likely that these can be optimized without decreasing the score of the route
         probs = (inverse_ratio_of_maximal_scores / np.sum(inverse_ratio_of_maximal_scores) + (inverse_sdr_scores / np.sum(inverse_sdr_scores))) / 2
         indices = np.random.choice(len(individual), number_of_visits_to_optimize, p = probs, replace = False)
 
@@ -615,7 +652,7 @@ class GA:
             change_in_length = (new_lengths[0] + new_lengths[1]) - (individual.segment_lengths[idx] + individual.segment_lengths[idx + 1])
 
             if (change_in_length < maximal_extra_distance_budget) and ((new_score / sum(new_lengths) > sdr_score) or (new_score > individual.scores[idx])):
-                # Udate individual
+                # Update individual
                 individual.states[idx] = new_q
                 individual.route[idx] = new_visit
 
@@ -657,16 +694,22 @@ class GA:
         blacklist = set(visit[0] for visit in individual.route)
         possible_candidates = list(set(range(self.number_of_nodes)).difference(blacklist))
 
+        i, j = individual.route[seg_idx - 1][0] if seg_idx != 0 else self.number_of_nodes, individual.route[seg_idx][0] if seg_idx != len(individual) else self.number_of_nodes + 1
+
         # TODO: These possible candidates needs to be reduced in some way! instead of computing these minimum distances, which is waaaaay to expensive.
-        #distances = [compute_minimum_distance_to_point_from_dubins_path_segment(self.problem_instance.nodes[k].pos, q_i, sub_segment_types, sub_segment_lengths, self.problem_instance.rho) for k in possible_candidates]
-        #candidates = [k for k, dist in zip(possible_candidates, distances) if dist < self.problem_instance.sensing_radii[1]]
-        candidates = possible_candidates
+        distances = [compute_minimum_distance_to_point_from_dubins_path_segment(self.problem_instance.nodes[k].pos, q_i, sub_segment_types, sub_segment_lengths, self.problem_instance.rho) for k in possible_candidates]
+        candidates_by_min_distance_to_dubins_path_segment = [k for k, dist in zip(possible_candidates, distances) if dist < self.problem_instance.sensing_radii[1]]
+        #candidates = possible_candidates
+        candidates_by_min_distance_to_line_segment = [k for k in possible_candidates if self.distances_to_line_segments[i, j, k] < 2 * self.problem_instance.sensing_radii[1] + 3 * self.problem_instance.rho]
+
+        assert len(set(candidates_by_min_distance_to_dubins_path_segment).difference(candidates_by_min_distance_to_line_segment)) == 0
+        candidates = candidates_by_min_distance_to_line_segment
 
         # Find candidate visits based on discrete sampling of the path segment at seg_idx.
         # NOTE: each candidate visit is build in the following manner (idx, phi, tau, r)
         # where idx is used to ensure that they are added to the route in the correct order.
         candidate_visits: Dict[int, List[Visit]] = {}
-        for idx, configuration in enumerate(sample_dubins_path(q_i, sub_segment_types, sub_segment_lengths, self.problem_instance.rho + 0.001, delta = (self.problem_instance.sensing_radii[1] - self.problem_instance.sensing_radii[0]), flip_angles = (seg_idx == 0))):
+        for idx, configuration in enumerate(sample_dubins_path(q_i, sub_segment_types, sub_segment_lengths, self.problem_instance.rho + 0.001, delta = (self.problem_instance.sensing_radii[1] - self.problem_instance.sensing_radii[0]) / 2, flip_angles = (seg_idx == 0))):
             for k in candidates:
                 delta = self.problem_instance.nodes[k].pos - configuration.pos 
                 r = np.linalg.norm(delta)
@@ -715,7 +758,7 @@ class GA:
         individual.aoa_indices = individual.aoa_indices[:seg_idx] + aoa_indices + individual.aoa_indices[seg_idx:]
         individual.psi_mutation_step_sizes = individual.psi_mutation_step_sizes[:seg_idx] + psi_mutation_step_sizes + individual.psi_mutation_step_sizes[seg_idx:]
 
-        # TODO: Compute path segment lengths for the new path segments. 
+        # TODO: Compute path segment lengths for the new path segments. (Very minor improvement)
                 
         return individual, range(seg_idx, seg_idx + number_of_visits_added)
 
@@ -789,7 +832,7 @@ class GA:
             info_goat_fitness = []
 
         start_time = time.time()
-        # Generate an initial population, which almost satifies the distant constraint, ie. add nodes until
+        # Generate an initial population, which almost satisfies the distant constraint, ie. add nodes until
         # the sink cannot be reached within d - t_max units where d denotes the length of the route.
         self.population = self.initialize_population()
 
@@ -805,7 +848,12 @@ class GA:
 
         # Compute distances which will be used to guide the mutation operator
         positions = np.concatenate((np.array([node.pos for node in self.problem_instance.nodes]), self.problem_instance.source.reshape(1, 2), self.problem_instance.sink.reshape(1, 2)))
-        self.sdr_tensor = compute_sdr_tensor(positions, np.array([node.base_line_score for node in self.problem_instance.nodes]), c_s = 2, c_d = 2)
+        scores = np.array([node.base_line_score for node in self.problem_instance.nodes])
+        self.distances_to_line_segments = compute_distances_from_nodes_to_line_segments(positions)
+        self.sdr_tensor = compute_sdr_tensor(positions, scores, 2.0, 2.0)
+        #self.sdr_tensor = compute_score_distance_from_line_segments_ratio_tensor(self.distances_to_line_segments, 
+        #                                                                         np.array([node.base_line_score for node in self.problem_instance.nodes]), 
+        #                                                                         self.problem_instance.sensing_radii[1])
         self.sdrs_for_overwrite = np.empty_like(self.sdr_tensor[0][0]) 
         self.default_mask = np.ones(self.number_of_nodes, dtype=bool)
         self.mask_for_overwrite = np.empty_like(self.default_mask)
@@ -815,7 +863,7 @@ class GA:
         # selection methods defined earlier in the class declaration.
         self.fitnesses = [self.fitness_function(individual) for individual in self.population]
 
-        # NOTE: The fitnesses are set as a field of the class so they are accessable within the method
+        # NOTE: The fitnesses are set as a field of the class so they are accessible within the method
         probabilities = self.sigma_scaling()
         cdf = np.add.accumulate(probabilities)
 
@@ -849,7 +897,7 @@ class GA:
             while (time_used := time.time() - start_time) < time_budget:
                 # Generate new offspring using parent selection based on the computed fitnesses, to select m parents
                 # and perform k-point crossover using these parents, to create a total of m^k children which is
-                # subsequently mutated according to the mutation_probability, this also allows the "jiggeling" of 
+                # subsequently mutated according to the mutation_probability, this also allows the "jiggling" of 
                 # the angles in order to find new versions of the parents with higher fitness values.
                 offspring = []
                 while len(offspring) < self.lmbda: 
@@ -874,7 +922,7 @@ class GA:
                         individual, indices_of_free_visits_added = self.add_free_visits(individual, segment_idx + offset)
 
                         if (m := len(indices_of_free_visits_added)) != 0:
-                            # TODO: Remove once we compute the lengths of the new path segments within the add_free_visits method.
+                            # TODO: Remove once we compute the lengths of the new path segments within the add_free_visits method. (Very minor improvement, compute_length_of_route_segments_from_states only takes 16.7 seconds in total out of the 300 seconds.)
                             individual.segment_lengths = self.problem_instance.compute_lengths_of_route_segments_from_states(individual.states)
                             amount_over_distance_budget = self.problem_instance.t_max - sum(individual.segment_lengths)
                             for jdx_of_free_visit_added in indices_of_free_visits_added:
@@ -903,11 +951,6 @@ class GA:
                     self.individual_with_highest_recorded_fitness = deepcopy(self.population[idx_of_individual_with_highest_fitness])
                     self.highest_fitness_recorded = self.fitnesses[idx_of_individual_with_highest_fitness]
                     self.length_of_individual_with_highest_recorded_fitness = self.problem_instance.compute_length_of_route(self.individual_with_highest_recorded_fitness.route)
-
-                #assert sum(self.individual_with_highest_recorded_fitness.scores) == self.highest_fitness_recorded
-
-                #for individual in self.population:
-                #    assert len(individual.route) == len({k for (k, _, _, _) in individual.route})
 
                 # Update the tqdm progress bar and add extra information regarding the genetic algorithm.
                 if display_progress_bar:
@@ -969,3 +1012,5 @@ if __name__ == "__main__":
     #cProfile.run("ga.run(300, display_progress_bar = True)", sort = "cumtime")
     route = ga.run(300, display_progress_bar=True, trace=True)
     problem_instance.plot_with_route(route, utility_function, show=True)
+# %%
+ 
