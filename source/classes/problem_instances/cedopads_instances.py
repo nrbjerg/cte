@@ -2,7 +2,7 @@
 from __future__ import annotations
 import random
 from dataclasses import dataclass, field
-from typing import List, Tuple, Optional, Dict, Callable
+from typing import List, Tuple, Optional, Dict, Callable, Union
 from classes.data_types import Position, AreaOfAcquisition, Angle, State, compute_difference_between_angles, Vector
 import dubins
 import os 
@@ -120,6 +120,17 @@ class CEDOPADSInstance:
     t_max: float
     rho: float
     eta: Angle
+
+    def __eq__ (self, other: Union[CEDOPADSInstance, str]):
+        """Makes the CEDOPADS instance hashable"""
+        if type(other) == CEDOPADSInstance:
+            return self.problem_id == other.problem_id
+        else:
+            return self.problem_id == other
+
+    def __hash__(self):
+        """Makes the CEDOPADS instance hashable"""
+        return hash(self.problem_id)
     
     @staticmethod
     def load_from_file(file_name: str, needs_plotting: bool = False) -> CEDOPADSInstance:
