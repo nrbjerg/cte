@@ -1,6 +1,8 @@
 from classes.problem_instances.cedopads_instances import CEDOPADSNode, Visit
 import numpy as np 
-from typing import Tuple, Iterable
+from typing import Tuple, Iterable, Callable
+
+CEDOPADSSampler = Callable[[CEDOPADSNode, float, Tuple[float, float]], Iterable[Visit]]
 
 def equidistant_sampling(node: CEDOPADSNode, eta: float, sensing_radii: Tuple[float, float]) -> Iterable[Visit]:
     """Simply samples the visits at the middle of each AOA""" 

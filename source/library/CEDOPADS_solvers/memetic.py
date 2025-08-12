@@ -1025,5 +1025,6 @@ if __name__ == "__main__":
     #cProfile.run("ga.run(300, display_progress_bar = True)", sort = "cumtime")
     route = ga.run(300, display_progress_bar=True, trace=True)
     problem_instance.plot_with_route(route, utility_function, show=True)
+    
 # %%
  

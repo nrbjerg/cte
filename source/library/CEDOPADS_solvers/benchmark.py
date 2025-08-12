@@ -1,71 +1,89 @@
-from typing import Tuple
+from typing import Tuple, Iterable, List, Dict
 
-import random
 import os 
-import logging
-from library.CEDOPADS_solvers.grasp import GRASP
-from library.CEDOPADS_solvers.greedy import greedy
 from library.CEDOPADS_solvers.memetic import GA
+from library.CEDOPADS_solvers.sampling_followed_by_exact import solve_sampled_CEDOPADS
+from library.CEDOPADS_solvers.samplers import equidistant_sampling, CEDOPADSSampler
 import multiprocessing
 from classes.problem_instances.cedopads_instances import CEDOPADSInstance, utility_fixed_optical, UtilityFunction, load_CEDOPADS_instances
-from library.CEDOPADS_solvers.local_search_operators import add_free_visits, get_samples
 from classes.data_types import Vector
 import datetime
 import numpy as np 
+import json
 
-# This is what needs to be updates each time.
-def worker_function_GA(args: Tuple[int, float, CEDOPADSInstance]) -> Tuple[Vector, str]:
-    """The actual function which calls the genenetic algorithm and generates the results"""
-    number_of_repetitions, time_budget, problem_instance = args
-    utility_function = utility_fixed_optical
-    ga = GA(problem_instance, utility_function, mu = 512, lmbda=512 * 7)
-    routes = [ga.run(time_budget) for _ in range(number_of_repetitions)]
-    
-    # Should simply return the results from the algorithm.
-    info = f"Memetic {utility_function=}, {time_budget=}, {number_of_repetitions=}"
-    return (np.array([problem_instance.compute_score_of_route(add_free_visits(problem_instance, route, utility_function), utility_function) for route in routes]), info)
+def worker_function_self_adaptive_memetic_algorithm (args: Tuple[CEDOPADSInstance, float, int]) -> Tuple[str, List[float], List[float]]:
+    """Runs the actual benchmarking of the self-adaptive memetic algorithm on a problem instance."""
+    problem_instance, time_budget, number_of_repetitions = args
 
-def worker_function_grasp(args: Tuple[int, float, CEDOPADSInstance]) -> Tuple[Vector, str]:
-    """The actual function which calls the GRASP and generates the results"""
-    number_of_repetitions, time_budget, problem_instance = args
-    utility_function = utility_fixed_optical
-    grasp = GRASP(problem_instance, utility_function)
-    p = 0.99
-    routes = [grasp.run(time_budget, p, get_samples) for _ in range(number_of_repetitions)]
-    
-    # Should simply return the results from the algorithm.
-    info = f"GRASP: {utility_function=}, {p=}, {time_budget=}, {number_of_repetitions=}"
-    return (np.array([problem_instance.compute_score_of_route(route, utility_function) for route in routes]), info)
+    scores, run_times = [], []
+    for _ in range(number_of_repetitions):
+        ga = GA(problem_instance, utility_function, seed=np.random.choice(1024))
+        score, run_time = ga.run(time_budget)
+        scores.append(score)
+        run_times.append(run_time)
 
-def worker_function_greedy(args: Tuple[int, float, CEDOPADSInstance]) -> Tuple[Vector, str]:
-    """The actual function which calls the GRASP and generates the results"""
-    _, _, problem_instance = args
-    utility_function = utility_fixed_optical
-    
-    routes = [greedy(problem_instance, utility_function)]
-    
-    # Should simply return the results from the algorithm.
-    info = f"Greedy: {utility_function=}"
-    return (np.array([problem_instance.compute_score_of_route(route, utility_function) for route in routes]), info)
+    return problem_instance.problem_id, scores, run_times
 
-def quick_benchmark(k: int = 14, number_of_repetitions: int = 10, time_budget: float = 300.0):
-    """Quickly benchmarks the memetic algorithm on a total of m problem instances, using multiprocessing"""
-    logger = logging.getLogger(__name__)
-    log_file = os.path.join(os.getcwd(), "logs", f"{datetime.date.today()}-{datetime.datetime.now().strftime('%H:%M')}.log")
-    logging.basicConfig(filename=log_file, encoding="utf-8", level = logging.INFO)
+def benchmark_memetic_algorithm(problem_instances: Iterable[CEDOPADSInstance], log_file: str, time_budget: float, number_of_repetitions: int):
+    """Benchmarks the self-adaptive memetic algorithm in a manner which can be disrupted during the computation."""
+    path_to_log_file = os.path.join(os.getcwd(), "benchmarks", "CEDOPADS", log_file)
+    if os.path.exists(path_to_log_file):
+        with open(path_to_log_file, "r") as file:
+            json_obj: Dict[str, Dict[str, List[float]]] = json.load(file)
+    else:
+        json_obj = {}
 
-    random.seed(42)
-    problem_instances = random.sample(load_CEDOPADS_instances(), k)
+    problem_instances_which_has_not_already_been_registered = set(problem_instances).difference(json_obj.keys())
+    print(f"Running benchmarking the memetic algorithm on {len(problem_instances_which_has_not_already_been_registered)} CEDOPADS instances taking a total of a maximum of {time_budget * number_of_repetitions * len(problem_instances_which_has_not_already_been_registered)} seconds.")
 
-    with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
-        output = p.map(worker_function_grasp, [(number_of_repetitions, time_budget, problem_instance) for problem_instance in problem_instances])
+    batch_size = multiprocessing.cpu_count()
+    with multiprocessing.Pool() as p:
+        for i in range(0, len(problem_instances_which_has_not_already_been_registered), multiprocessing.cpu_count()):
+            batch_of_problem_instances = problem_instances_which_has_not_already_been_registered[i:i + batch_size]
 
-        #logger.info(f"Problems: {[problem_instance.problem_id for problem_instance in problem_instances]}")
-        for i, (result, info) in enumerate(output):
-            if i == 0: # No need to repeat our selves.
-                logger.info(info)
+            # Get scores from the current batch
+            args = [(problem_instance, time_budget, number_of_repetitions) for problem_instance in batch_of_problem_instances]
+            outputs = p.map(worker_function_self_adaptive_memetic_algorithm, args)
+            for (problem_id, scores, run_times) in outputs:
+                json_obj[problem_id] = {"scores": scores, "run times": run_times}
 
-            logger.info(f"ID: {problem_instances[i].problem_id}, max = {np.max(result):.1f}, min = {np.min(result):.1f}, mean = {np.mean(result):.1f}, std = {np.std(result):.1f}")
+            # Save run data from Genetic algorithm 
+            with open(path_to_log_file, "w+") as file:
+                json.dump(json_obj, file) 
+
+def benchmark_sampling_followed_by_exact (problem_instances: Iterable[CEDOPADSInstance], log_file: str, sampling_method: CEDOPADSSampler, time_budget: float, number_of_repetitions: int):
+    """Benchmarks the self-adaptive memetic algorithm in a manner which can be disrupted during the computation."""
+    path_to_log_file = os.path.join(os.getcwd(), "benchmarks", "CEDOPADS", log_file)
+    if os.path.exists(path_to_log_file):
+        with open(path_to_log_file, "r") as file:
+            json_obj: Dict[str, Dict[str, List[float]]] = json.load(file)
+    else:
+        json_obj = {}
+
+    problem_instances_which_has_not_already_been_registered = set(problem_instances).difference(json_obj.keys())
+    print(f"Running sampling -> exact on {len(problem_instances_which_has_not_already_been_registered)} CEDOPADS instances taking a total of a maximum of {time_budget * number_of_repetitions * len(problem_instances_which_has_not_already_been_registered)} seconds.")
+
+    for problem_instance in problem_instances_which_has_not_already_been_registered:
+        json_obj[problem_instance.problem_id] = {"obj": [], "gap": [], "run time": []}
+        for _ in range(number_of_repetitions):
+            _, obj_val, gap, run_time = solve_sampled_CEDOPADS(problem_instance, utility_function, sampling_method, time_budget = time_budget)
+            json_obj[problem_instance.problem_id]["obj"].append(obj_val)
+            json_obj[problem_instance.problem_id]["gap"].append(gap)
+            json_obj[problem_instance.problem_id]["run time"].append(run_time)
+
+        
+        # Save new information as well
+        with open(path_to_log_file, "w+") as file:
+            json.dump(json_obj, file) 
 
 if __name__ == "__main__":
-    quick_benchmark()
+    # Specify utility function
+    utility_function = utility_fixed_optical
+    utility_function_str = "fixed_optical"
+
+    problem_instances = [CEDOPADSInstance.load_from_file(file_name) for file_name in [
+        "p4.4.g.c.a.txt"
+    ]]
+
+    benchmark_sampling_followed_by_exact(problem_instances, f"sampling_followed_by_exact_{utility_function_str}.json", equidistant_sampling, time_budget = 3600, number_of_repetitions=1)
+    benchmark_memetic_algorithm(problem_instances, f"memetic_{utility_function_str}.json", time_budget = 300, number_of_repetitions = 2)

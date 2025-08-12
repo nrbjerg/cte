@@ -4,12 +4,12 @@ import numpy as np
 from typing import List, Callable, Tuple, Iterable
 from classes.problem_instances.cedopads_instances import CEDOPADSInstance, utility_baseline, utility_fixed_optical, UtilityFunction, Visit, CEDOPADSNode
 from library.core.dubins.relaxed_dubins import compute_length_of_relaxed_dubins_path
-from library.CEDOPADS_solvers.samplers import equidistant_sampling
+from library.CEDOPADS_solvers.samplers import equidistant_sampling, CEDOPADSSampler
 import dubins
 from classes.data_types import AreaOfAcquisition, State
 import matplotlib.pyplot as plt 
 
-def solve_sampled_CEDOPADS (problem_instance: CEDOPADSInstance, utility_function: UtilityFunction, sampling_method: Callable[[CEDOPADSNode, float, Tuple[float, float]], Iterable[Visit]], time_budget: float = 3600) -> float:
+def solve_sampled_CEDOPADS (problem_instance: CEDOPADSInstance, utility_function: UtilityFunction, sampling_method: CEDOPADSSampler, time_budget: float = 3600) -> float:
     """Solved a sampled CEDOPADS problem using Gurobi, i.e. where the the headings, observation angles, and observation distances are sampled."""
     model = gp.Model(problem_instance.problem_id)
 
